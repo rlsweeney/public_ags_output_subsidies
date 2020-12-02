@@ -1,0 +1,49 @@
+----------------------------------------------------------------------------------------------------------------------------------------
+      name:  <unnamed>
+       log:  D:\GitDir\Projects\ags_capital_vs_output/output/logs/snl_prep.txt
+  log type:  text
+ opened on:  20 Mar 2019, 19:24:18
+
+. ********************************************************************************
+. import excel "$dropbox\Data\proprietary\snl\snl_wind_farms_static.xlsx", sheet("Static") firstrow clear
+
+. renvars, lower
+
+. drop if eiasitecode == ""
+(93 observations deleted)
+
+. 
+. local vars_of_interest eiasitecode plantoperator plantoperatorinstitutionkey ///
+>                        operatorsultimateparent  operatorsultimateparentinsti regulatoryindustry ///
+>                                            regulatorystatus owner isoname nercregioncode nercsubregioncode ///
+>                                            largestppacounterparty largestppacontractedcapacity activepowerpurchaseagreement
+
+. keep `vars_of_interest'
+
+. rename (`vars_of_interest') ///
+>        (facilityid operator operatorid operator_parent operator_parentid ///
+>             regulatory_industry regulatory_status owner_name iso nerc_region nerc_subregion ///
+>                 ppa_counterparty ppa_contracted_capacity_snl active_ppa_snl) 
+
+. destring facilityid, replace
+facilityid: all characters numeric; replaced as long
+
+. 
+. * Put SNL at the following variables that also are in EIA
+. renvars operator operatorid regulatory_status owner_name iso nerc_region nerc_subregion, postfix("_snl")
+
+. 
+. * For facilities that occur twice (n = 1) take the second one
+. bys facilityid: keep if _n == _N
+(1 observation deleted)
+
+. 
+. save "$generated_data/snl_data.dta", replace
+(note: file D:/Dropbox/projects/joe_aldy/1603/generated_data/snl_data.dta not found)
+file D:/Dropbox/projects/joe_aldy/1603/generated_data/snl_data.dta saved
+
+. ********************************************************************************
+. tempsetup
+D:\GitDir\Projects\ags_capital_vs_output\temp
+
+. capture log close

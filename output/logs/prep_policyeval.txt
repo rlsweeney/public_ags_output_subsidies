@@ -1,0 +1,1103 @@
+-------------------------------------------------------------------------------------------------------------------
+      name:  <unnamed>
+       log:  D:\GitDir\Projects\ags_capital_vs_output/output/logs/prep_policyeval.txt
+  log type:  text
+ opened on:   1 Aug 2020, 22:27:27
+
+. ********************************************************************************
+. 
+. *SET GLOBAL ASSUMPTION PARAMETERS **********************************************
+. ** [ not actually using these in this code, but going to call this file 
+. ** at the top of derivative code ]
+. 
+. eststo clear
+
+. estimates use  "$outdir/estimates/rd_main_spec.ster" //IV estimate
+
+. local te_iv = _b[flag_1603]
+
+. estimates use  "$outdir/estimates/match_main_spec.ster" //IV estimate
+
+. local te_match = _b[flag_1603]
+
+. global teffect = -1*(`te_iv' + `te_match')/200
+
+. 
+. /*******************************************************************************
+> DATA PREP 
+> *******************************************************************************/
+. 
+. *READ IN DEFLATOR *************************************************************
+. use $repodir/generated_data/deflators, clear
+
+. rename year firstyear
+
+. save fdeflator, replace 
+(note: file fdeflator.dta not found)
+file fdeflator.dta saved
+
+. 
+. *GET PPAs *************************************************************
+. ** [ these don't vary month to month, so need to clean then merge with panel ]
+. 
+. use $repodir/generated_data/static_reg_data, clear
+
+. *PARSE PPA PRICES
+. split pparate, parse(",") gen(tp_)
+variables created as string: 
+tp_1  tp_2  tp_3  tp_4  tp_5  tp_6
+
+. destring tp_*, force replace
+tp_1: all characters numeric; replaced as double
+(691 missing values generated)
+tp_2: all characters numeric; replaced as double
+(890 missing values generated)
+tp_3: all characters numeric; replaced as double
+(930 missing values generated)
+tp_4: all characters numeric; replaced as double
+(946 missing values generated)
+tp_5: all characters numeric; replaced as double
+(950 missing values generated)
+tp_6: all characters numeric; replaced as double
+(955 missing values generated)
+
+. egen pparate_max = rowmax(tp_*)
+(691 missing values generated)
+
+. egen pparate_med = rowmedian(tp_*)
+(691 missing values generated)
+
+. drop tp_*
+
+. 
+. merge 1:1 facilityid using $repodir/generated_data/external_data_all, nogen keep(match master)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                           317
+        from master                       317  
+        from using                          0  
+
+    matched                               642  
+    -----------------------------------------
+
+. 
+. capture drop p_ppa
+
+. egen p_ppa = rowmax(pparate_med PPA_bnef_median) 
+(634 missing values generated)
+
+. 
+. *put in real dollars based on first year 
+. merge m:1 firstyear using fdeflator, nogen keep(match master) 
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                               959  
+    -----------------------------------------
+
+. 
+. replace p_ppa = p_ppa*gdp_deflator2014 if gdp_deflator != .
+(309 real changes made)
+
+. 
+. keep facilityid p_ppa
+
+. 
+. save ppa_data, replace
+(note: file ppa_data.dta not found)
+file ppa_data.dta saved
+
+. 
+. 
+. * MERGE THESE INTO MONTHLY PANEL; CLEAN PRICES ***********************************
+. 
+. use $repodir/generated_data/panel_reg_data, clear
+
+. 
+. merge m:1 facilityid using ppa_data, nogen keep(match master)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                            66,589  
+    -----------------------------------------
+
+. 
+. * CLEAN MONTHLY PRICES **************************************
+. 
+. ** RETAIL PRICES ARE CENTS PER KWH
+. replace state_avg_price = state_avg_price*10
+(66,589 real changes made)
+
+. 
+. ** REC PRICES 
+. ** [ cleaned in `build/rec_prep.do` ]
+. gen p_rec = cond(rec_price != .,rec_price,0)
+
+. gen p_rec_exp = cond(expected_rec != .,expected_rec,0)
+
+. 
+. ** IOWA ALSO HAS A $15/mwh state level tax credit
+. ** https://iub.iowa.gov/renewable-energy-tax-credits **
+. replace p_rec = p_rec + 15 if state =="IA" & age <=120
+(4,320 real changes made)
+
+. replace p_rec_exp = p_rec_exp + 15 if state =="IA" & age <=120
+(4,320 real changes made)
+
+. 
+. ** PUT PRICES IN REAL TERMS 
+. ** [ASSUMING REC PRICE NOMINAL ]
+. merge m:1 year using $repodir/generated_data/deflators, nogen keep(match master)
+(note: variable year was int, now float to accommodate using data's values)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                            66,589  
+    -----------------------------------------
+
+. 
+. foreach v of varlist price_resale_EIA state_avg_price p_rec* {
+  2.         replace `v' = `v'*gdp_deflator
+  3. }
+(21,241 real changes made)
+(56,499 real changes made)
+(17,217 real changes made)
+(26,613 real changes made)
+
+. 
+. ** FILL IN MISSING PRICES WITH FACILITY AVERAGE
+. capture drop tk
+
+. egen tk = mean(price_resale_EIA), by(facilityid)
+(10188 missing values generated)
+
+. replace price_resale_EIA = tk if price_resale_EIA == .
+(26,941 real changes made)
+
+. 
+. ** SOME FIRMS HAVE NON-RESALE SALES. 
+. ** GIVING THEM THE AVERAGE RETAIL PRICE IN STATE
+. 
+. gen frac_resale = salesforresale /  totaldisposition
+(12,716 missing values generated)
+
+. replace frac_resale = 0 if totaldisp > 0 & totaldisp != . & frac_res == .
+(183 real changes made)
+
+. replace frac_resale = 1 if frac_resale > 1 & frac_resale != .
+(36 real changes made)
+
+. capture drop tk 
+
+. egen tk = mean(frac_resale), by(facilityid)
+(8471 missing values generated)
+
+. replace frac_resale = tk if frac_resale == .
+(4,062 real changes made)
+
+. drop tk 
+
+. 
+. gen avg_price = frac_resale * price_resale + (1-frac_resale) * state_avg_price
+(10,188 missing values generated)
+
+. replace avg_price = state_avg_price if frac_resale==0
+(976 real changes made)
+
+. 
+. * FOR CALCULATING PROFITS, SET PRICE EQUAL TO THE MAX OF EIA RESALE OR PPA 
+. egen p_max = rowmax(avg_price p_ppa)
+(8946 missing values generated)
+
+. gen p = p_max + p_rec_exp 
+(8,946 missing values generated)
+
+. 
+. ** calculate share non-missing prices 
+. gen pmiss = cond(avg_price == . | avg_price == 0,1,0)
+
+. egen npmiss = sum(pmiss), by(facilityid)
+
+. bys facilityid: gen ni = _N
+
+. gen pct_p_missing = npmiss/ni 
+
+. drop pmiss npmiss 
+
+. 
+. ** PUT CAPACITY FACTOR IN PCT 
+. replace capacity_factor = capacity_factor/100
+(65,947 real changes made)
+
+. 
+. order facilityid year month age flag_1603 avg_price p_* /// 
+>                 capacity_factor monthcap nameplate_capacity 
+
+. 
+. sort facilityid year month
+
+. 
+. ** RESTRICT SAMPLE
+. ** [ insample;  plantS observed through 2014]
+. 
+. keep if insample
+(29,480 observations deleted)
+
+. egen maxyear = max(year), by(facilityid)
+
+. keep if maxyear == 2014
+(0 observations deleted)
+
+. 
+. drop if pct_p_missing > .5 
+(3,198 observations deleted)
+
+. drop if facilityid == 57566 // this one missing price data for a year 
+(34 observations deleted)
+
+. 
+. ** RESTRICT TO PLANTS ENTERING DURING THE 1603 PERIOD 
+. ** [not using the others for anything at the momemnt]
+. keep if firstyear >= 2009 & firstyear <= 2012
+(20,429 observations deleted)
+
+. 
+. save revdata, replace
+(note: file revdata.dta not found)
+file revdata.dta saved
+
+. 
+. 
+. * COLLAPSE AVERAGE PRICE AND CAPACITY FACTOR  *******************************************************************
+> *
+. 
+. use revdata, clear
+
+. 
+. gen tc = capacity_factor*p
+
+. collapse (sum) tc tk = capacity_factor (mean) capacity_factor, by(facilityid) 
+
+. 
+. gen avg_p = tc/tk
+
+. drop tk tc 
+
+. 
+. *MERGE IN PLANT CHARACTERISTICS
+. merge 1:1 facilityid using $repodir/generated_data/static_reg_data, nogen keep(match master)
+(label pcurve_match already defined)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                               308  
+    -----------------------------------------
+
+. merge 1:1 facilityid using $repodir/generated_data/cost_estimates, nogen keep(match master)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                               308  
+    -----------------------------------------
+
+. merge 1:1 facilityid using ppa_data, nogen keep(match master)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                               308  
+    -----------------------------------------
+
+. 
+. *use estimated costs where not observed
+. gen flag_cost_estimated = cond(cost_mw == . | costsample == 0,1,0)
+
+. replace cost_mw = cost_mw_est if flag_cost_estimated == 1
+(85 real changes made)
+
+. 
+. save policyEvalData, replace
+(note: file policyEvalData.dta not found)
+file policyEvalData.dta saved
+
+. 
+. /*******************************************************************************
+> PROGRAM PREP 
+> *******************************************************************************/
+. 
+. * GET PROFITS ******************************************************************
+. ** this program estimates everything per mw, which can be immediately be related to the te 
+. 
+. capture program drop getprofits
+
+. program define getprofits
+  1.         args teffect nyears rfirm rptc output_subsidy capital_subsidy noTE include_depreciation
+  2. 
+. * TEFFECT ; NUMBER OF YEARS ; ANNUAL DISCOUNT RATE ; 
+. ** PTC DISCOUNT RATE; OUTPUT SUBSIDY LEVEL ; INVESTMENT SUBSIDY LEVEL ;
+. * INDICATOR=1 TO SHUT DOWN PTC_RESPONSE ; INDICATOR=1 TO INCLUDE DEPRECIATION
+.         
+. qui{
+  3. 
+.         use policyEvalData, clear
+  4.         
+.         local lifemonths = `nyears'*12
+  5.         local mrate = (1+`rfirm')^(1/12)-1 // monthly equivalent of annual rate when compounded
+  6.         local mrate_ptc = (1+`rptc')^(1/12)-1 // monthly equivalent of annual rate when compounded
+  7.         local ptcresponse = `teffect'*`output_subsidy'/23  // linearly scales treatment effect 
+  8.         if(`noTE'==1){
+  9.                         local ptcresponse = 0
+ 10.         }
+ 11.         
+.         *get annuity factors 
+.         gen df_an_T = (1 - (1 + `mrate')^(-`lifemonths'))/`mrate' 
+ 12.         gen df_an_10 = (1 - (1 + `mrate')^(-120))/`mrate'
+ 13.         gen df_an_10_ptc = (1 - (1 + `mrate_ptc')^(-120))/`mrate_ptc'
+ 14. 
+.         * 1603 REVENUES *************************************************************
+.         *adjust observed cf by scaled TE 
+.         ** all these plants are pre 10 years 
+.         ** so PTC plants need to be adjusted down by te to for 1603 
+.         
+.         gen cf_1603 = capacity_factor 
+ 15.         replace cf_1603 = cf_1603 - `teffect' if flag_1603 == 0
+ 16. 
+.         * use capacity factor and annuity to get discounted quantity per mw over 25 years
+.         * [730 is average number of hours in a month 8760/12]
+.         gen dQ_1603 = cf_1603 * 730 * df_an_T // d signifies "discounted" ; "delta" is change 
+ 17.         gen lcoe_1603 = cost_mw*1000000/dQ_1603
+ 18.         
+.         gen dRev_1603_mw = dQ_1603 * avg_p/1000000 
+ 19.         
+.         * PTC REVENUES *************************************************************
+.         ** for ptc, teffect yields ptcresponse more output for 10 years 
+.         gen delta_dQ_ptc = `ptcresponse' * 730 * df_an_10
+ 20.         gen dQ_ptc = dQ_1603 + delta_dQ_ptc
+ 21. 
+.         gen lcoe_ptc = cost_mw*1000000/dQ_ptc
+ 22.         
+.         * get additional revenues under ptc (on marginal and inframarginal output)
+.         gen p_ptc = `output_subsidy' // scale ptc revenue down in nominal terms 
+ 23.         
+.         * on marginal output, assume net revenue is half the marginal price times the marginal quantity 
+.         * discount these streams at the PTC discount rate, to get implied ammount of upfront "revenue" (investmen
+> t) 
+.         gen netrev_ptc_marginal = .5 * p_ptc * `ptcresponse' * 730 * df_an_10_ptc
+ 24.         gen rev_ptc_infra = p_ptc*cf_1603*730 * df_an_10_ptc
+ 25. 
+.         gen dRev_PTC_mw = dRev_1603_mw + (rev_ptc_infra + netrev_ptc_marginal)/1000000
+ 26. 
+.         *these are just for summarizing the effective average price under the ptc
+.         gen d_rev_ptc_infra = rev_ptc_infra/dQ_ptc
+ 27.         gen d_rev_ptc_marginal = netrev_ptc_marginal/dQ_ptc
+ 28.         gen avg_p_ptc = avg_p + d_rev_ptc_infra + d_rev_ptc_marginal
+ 29. 
+.         save policyRevenues, replace
+ 30.         
+.         *O&M COSTS
+.         use $repodir/generated_data/deflators, clear
+ 31.         keep if year==2018
+ 32.         local om_deflator = gdp_deflator2014
+ 33.         
+.         use policyRevenues, clear
+ 34.         capture drop fixedOMkWyear 
+ 35.         gen fixedOMkWyear = 29 * `om_deflator' // FROM 2018 DOE WTMR, DEFLATED TO 2014 DOLLARS
+ 36.         
+.         gen fom_mw = fixedOMkWyear/12*1000 * df_an_T / 1000000
+ 37.         
+.         *PROFITS
+.         gen pi_1603 = dRev_1603_mw - cost_mw*(1-`capital_subsidy') - fom_mw
+ 38.         gen pi_ptc = dRev_PTC_mw - cost_mw - fom_mw
+ 39.         
+.         *PUBLIC EXPENDITURE IN MILLION $ PER MW
+.         gen pubexp_1603 = cost_mw * `capital_subsidy'
+ 40.         gen pubexp_ptc  = `output_subsidy' * (cf_1603 + `ptcresponse') * 730 * df_an_10 / 1e6 // convert dolla
+> rs to millions of dollars
+ 41.         
+.         *INCLUDE DEPRECIATION
+.         if(`include_depreciation'==1){
+ 42.                 local tax_rate = 0.35 // set marginal tax rate
+ 43. 
+.                 *GROSS DEPRECIATION
+.                 *50% bonus in year 1, then 5-year MACRS halved bc of bonus: 10%, 16%, 9.6%, 5.76%, 5.76%, 2.88%
+.                 *this is based on table A-1 of IRS Publication 946 (2012)
+.                 
+.                 gen deprec_factor = (0.5+0.1)*(1/(1+`rptc')) + 0.16*(1/(1+`rptc'))^2 + /// this is a multiplier t
+> o get PDV of depreciation per dollar of cost basis
+>                         0.096*(1/(1+`rptc'))^3 + 0.0576*(1/(1+`rptc'))^4 + 0.0576*(1/(1+`rptc'))^5 + 0.0288*(1/(1
+> +`rptc'))^6
+ 44. 
+.                 gen gross_deprec_PTC =  `tax_rate' * deprec_factor * cost_mw // add PDV of depreciation from prof
+> its, assuming marginal tax rate of 35%
+ 45.                 gen gross_deprec_1603 = `tax_rate' * deprec_factor * (1 - `capital_subsidy' / 2) * cost_mw  //
+>  add PDV of depreciation value after reducing cost basis by half of 1603 grant amount
+ 46.                 
+.                 *DISCOUNT THE GOVERNMENT COST AT REGULAR DISCOUNT RATE 
+.                 gen deprec_factor_gov = (0.5+0.1)*(1/(1+`rfirm')) + 0.16*(1/(1+`rfirm'))^2 + /// this is a multip
+> lier to get PDV of depreciation per dollar of cost basis
+>                         0.096*(1/(1+`rfirm'))^3 + 0.0576*(1/(1+`rfirm'))^4 + 0.0576*(1/(1+`rfirm'))^5 + 0.0288*(1
+> /(1+`rfirm'))^6
+ 47.         
+.                 gen gross_deprec_PTC_gov =  `tax_rate' * deprec_factor_gov * cost_mw // add PDV of depreciation f
+> rom profits, assuming marginal tax rate of 35%
+ 48.                 gen gross_deprec_1603_gov = `tax_rate' * deprec_factor_gov * (1 - `capital_subsidy' / 2) * cos
+> t_mw  // add PDV of depreciation value after reducing cost basis by half of 1603 grant amount
+ 49.                 
+.                 
+.                 replace pi_ptc = pi_ptc + gross_deprec_PTC 
+ 50.                 replace pi_1603 = pi_1603 + gross_deprec_1603
+ 51.                 *public expenditure per mw
+.                 replace pubexp_ptc  = pubexp_ptc  + gross_deprec_PTC_gov
+ 52.                 replace pubexp_1603 = pubexp_1603 + gross_deprec_1603_gov
+ 53.         }
+ 54.         
+.         *CONVERT dQ PER MW to dQ IN LEVELS
+.         replace dQ_ptc = dQ_ptc * first_nameplate_capacity
+ 55.         replace dQ_1603 = dQ_1603 * first_nameplate_capacity
+ 56.         
+.         *CONVERT PUBLIC EXPENDITURE FROM MILLION $ PER MW TO $ IN LEVELS
+.         replace pubexp_ptc = pubexp_ptc * first_nameplate_capacity * 1e6
+ 57.         replace pubexp_1603 = pubexp_1603 * first_nameplate_capacity * 1e6
+ 58.         
+.         *SUBSIDY GROUP FOR 1603 PLANTS
+.         capture drop sgroup
+ 59.         gen sgroup = "both" if pi_1603>=0 // & flag_1603==1
+ 60.         replace sgroup = "1603 only" if pi_1603>=0 & pi_ptc<0 
+ 61.         replace sgroup = "PTC only" if pi_1603<0 & pi_ptc>=0 
+ 62.         replace sgroup = "neither" if pi_1603<0 & pi_ptc<0
+ 63. 
+.         gen ind_pi_ptc = pi_ptc > 0
+ 64.         gen ind_pi_1603 = pi_1603 > 0
+ 65. 
+.         gen ptc_pref = cond(pi_ptc > pi_1603,1,0)
+ 66. 
+. }
+ 67. end
+
+. 
+. capture program drop tab_profits
+
+. program define tab_profits
+  1. 
+.         sum pi_*, detail
+  2.         
+.         di "Indicator for pi > 0 by type"
+  3.         tab ind_*
+  4.         
+.         di "1603 plants only" 
+  5.         tab ind_* if flag_1603 == 1
+  6.         
+.         di "PTC preference by subsidy type selected"
+  7.         tab ptc_pref flag_1603
+  8. end
+
+. 
+. 
+end of do-file
+
+. 
+. *FUNCTION INPUTS: 
+. ** TEFFECT ; NUMBER OF YEARS ; ANNUAL DISCOUNT RATE ; 
+. ** PTC VALUATION (%); OUTPUT SUBSIDY LEVEL ; INVESTMENT SUBSIDY LEVEL ;
+. ** INDICATOR=1 TO SHUT DOWN PTC_RESPONSE ; INDICATOR=1 TO INCLUDE DEPRECIATION
+. 
+. * DEFINE MAIN ASSUMPTIONS 
+. * HERE REMOVE ALL DIFFERENTIAL TAX TREATMENT (OUTPUT SUBSIDY AS CASH AND NO DIFFERENTIAL DEPRECIATION)
+. getprofits $teffect 25 .05 .05 23 .3 0 0
+
+. tab_profits 
+
+                           pi_1603
+-------------------------------------------------------------
+      Percentiles      Smallest
+ 1%     -1.33559      -1.460708
+ 5%    -.8359488      -1.448847
+10%    -.6090724      -1.366187       Obs                 308
+25%     .0129064       -1.33559       Sum of Wgt.         308
+
+50%     .6183128                      Mean           .7550628
+                        Largest       Std. Dev.      1.195189
+75%     1.352622       4.179935
+90%     2.252044       4.770554       Variance       1.428477
+95%     2.605062       7.373067       Skewness       1.507976
+99%     4.179935       7.781712       Kurtosis       9.099256
+
+                           pi_ptc
+-------------------------------------------------------------
+      Percentiles      Smallest
+ 1%    -1.703248      -2.106357
+ 5%    -1.110663      -1.997298
+10%    -.7882243      -1.728447       Obs                 308
+25%    -.2072303      -1.703248       Sum of Wgt.         308
+
+50%     .5377605                      Mean           .6198535
+                        Largest       Std. Dev.      1.228902
+75%     1.245763       3.919408
+90%     2.052917       4.574335       Variance         1.5102
+95%     2.510535       7.406231       Skewness       1.378239
+99%     3.919408       7.839634       Kurtosis       8.965447
+Indicator for pi > 0 by type
+
+           |      ind_pi_1603
+ind_pi_ptc |         0          1 |     Total
+-----------+----------------------+----------
+         0 |        75         20 |        95 
+         1 |         1        212 |       213 
+-----------+----------------------+----------
+     Total |        76        232 |       308 
+
+1603 plants only
+
+           |      ind_pi_1603
+ind_pi_ptc |         0          1 |     Total
+-----------+----------------------+----------
+         0 |        50         15 |        65 
+         1 |         0        146 |       146 
+-----------+----------------------+----------
+     Total |        50        161 |       211 
+
+PTC preference by subsidy type selected
+
+           |      1603 Grant
+  ptc_pref |         0          1 |     Total
+-----------+----------------------+----------
+         0 |        55        182 |       237 
+         1 |        42         29 |        71 
+-----------+----------------------+----------
+     Total |        97        211 |       308 
+
+
+. 
+. tab flag_1603, matcell(tm)
+
+ 1603 Grant |      Freq.     Percent        Cum.
+------------+-----------------------------------
+          0 |         97       31.49       31.49
+          1 |        211       68.51      100.00
+------------+-----------------------------------
+      Total |        308      100.00
+
+. mat list tm
+
+tm[2,1]
+     c1
+r1   97
+r2  211
+
+. local N_CostEffectiveness_PTC = tm[1,1]
+
+. local N_CostEffectiveness_1603 = tm[2,1]
+
+. 
+. file open myfile using "$repodir/output/estimates/N_CostEffectiveness_PTC.tex", write text replace 
+(note: file D:\GitDir\Projects\ags_capital_vs_output/output/estimates/N_CostEffectiveness_PTC.tex not found)
+
+. file write myfile "`N_CostEffectiveness_PTC'"
+
+. file close myfile
+
+. 
+. file open myfile using "$repodir/output/estimates/N_CostEffectiveness_1603.tex", write text replace 
+(note: file D:\GitDir\Projects\ags_capital_vs_output/output/estimates/N_CostEffectiveness_1603.tex not found)
+
+. file write myfile "`N_CostEffectiveness_1603'"
+
+. file close myfile
+
+. 
+. tab flag_1603 flag_cost_estimated, matcell(tm)
+
+           |  flag_cost_estimated
+1603 Grant |         0          1 |     Total
+-----------+----------------------+----------
+         0 |        32         65 |        97 
+         1 |       191         20 |       211 
+-----------+----------------------+----------
+     Total |       223         85 |       308 
+
+
+. local N_CostEffectiveness_PTC_missing = tm[1,2]
+
+. file open myfile using "$repodir/output/estimates/N_CostEffectiveness_PTC_missing.tex", write text replace 
+(note: file D:\GitDir\Projects\ags_capital_vs_output/output/estimates/N_CostEffectiveness_PTC_missing.tex not found
+> )
+
+. file write myfile "`N_CostEffectiveness_PTC_missing'"
+
+. file close myfile
+
+. 
+. *GENERIC COST-EFFECTIVENESS COMPARISON *****************************************
+. * ASSUMPTIONS: 
+. ** - NO DEPRECIATION 
+. ** - KEEP NEVER PROFITABLE PLANTS AND INFRAMARGINAL 
+. 
+. * get never profitable plants 
+. tempfile never_profitable
+
+. getprofits $teffect 25 .05 .05 23 .3 0 0
+
+. tab_profits 
+
+                           pi_1603
+-------------------------------------------------------------
+      Percentiles      Smallest
+ 1%     -1.33559      -1.460708
+ 5%    -.8359488      -1.448847
+10%    -.6090724      -1.366187       Obs                 308
+25%     .0129064       -1.33559       Sum of Wgt.         308
+
+50%     .6183128                      Mean           .7550628
+                        Largest       Std. Dev.      1.195189
+75%     1.352622       4.179935
+90%     2.252044       4.770554       Variance       1.428477
+95%     2.605062       7.373067       Skewness       1.507976
+99%     4.179935       7.781712       Kurtosis       9.099256
+
+                           pi_ptc
+-------------------------------------------------------------
+      Percentiles      Smallest
+ 1%    -1.703248      -2.106357
+ 5%    -1.110663      -1.997298
+10%    -.7882243      -1.728447       Obs                 308
+25%    -.2072303      -1.703248       Sum of Wgt.         308
+
+50%     .5377605                      Mean           .6198535
+                        Largest       Std. Dev.      1.228902
+75%     1.245763       3.919408
+90%     2.052917       4.574335       Variance         1.5102
+95%     2.510535       7.406231       Skewness       1.378239
+99%     3.919408       7.839634       Kurtosis       8.965447
+Indicator for pi > 0 by type
+
+           |      ind_pi_1603
+ind_pi_ptc |         0          1 |     Total
+-----------+----------------------+----------
+         0 |        75         20 |        95 
+         1 |         1        212 |       213 
+-----------+----------------------+----------
+     Total |        76        232 |       308 
+
+1603 plants only
+
+           |      ind_pi_1603
+ind_pi_ptc |         0          1 |     Total
+-----------+----------------------+----------
+         0 |        50         15 |        65 
+         1 |         0        146 |       146 
+-----------+----------------------+----------
+     Total |        50        161 |       211 
+
+PTC preference by subsidy type selected
+
+           |      1603 Grant
+  ptc_pref |         0          1 |     Total
+-----------+----------------------+----------
+         0 |        55        182 |       237 
+         1 |        42         29 |        71 
+-----------+----------------------+----------
+     Total |        97        211 |       308 
+
+
+. keep if pi_ptc<0 & pi_1603<0
+(233 observations deleted)
+
+. gen never_profitable = 1
+
+. keep facilityid never_profitable ptc_pref
+
+. save `never_profitable'
+file C:\Users\Rich\AppData\Local\Temp\ST_389c_000001.tmp saved
+
+. 
+. *PTC WITH OUTPUT RESPONSE
+. forval phi = 0(0.23)23.01 {
+  2.         qui{
+  3.                 getprofits      $teffect 25 .05 .05 `phi' .3 0 0
+  4.                 merge 1:1 facilityid using `never_profitable'
+  5.                 keep if pi_ptc >= 0 | never_profitable==1
+  6.                 gen phi = `phi'
+  7.                 collapse (sum) dQ=dQ_ptc pubexp_ptc, by(phi flag_1603)
+  8.                 gen plcoe_ptc  = pubexp_ptc / dQ
+  9.                 if `phi'==0{
+ 10.                         tempfile ptc
+ 11.                         save `ptc', replace
+ 12.                 }
+ 13.                 else{
+ 14.                         append using `ptc'
+ 15.                         save `ptc', replace
+ 16.                 }
+ 17.         }
+ 18. }
+
+. 
+. *PTC WITHOUT OUTPUT RESPONSE
+. forval phi = 0(0.23)23.01 {
+  2.         qui{ 
+  3.                 getprofits      $teffect 25 .05 .05 `phi' .3 1 0 // second to last indicator=1 shuts down trea
+> tment effect of output subsidy
+  4.                 merge 1:1 facilityid using `never_profitable'
+  5.                 keep if pi_ptc >= 0 | never_profitable==1
+  6.                 gen phi = `phi'
+  7.                 collapse (sum) dQ=dQ_ptc pubexp_ptc_noTE=pubexp_ptc, by(phi flag_1603)
+  8.                 gen plcoe_ptc_noTE  = pubexp_ptc_noTE / dQ
+  9.                 if `phi'==0{
+ 10.                         tempfile ptc_noTE
+ 11.                         save `ptc_noTE', replace
+ 12.                 }
+ 13.                 else{
+ 14.                         append using `ptc_noTE'
+ 15.                         save `ptc_noTE', replace
+ 16.                 }
+ 17.         }
+ 18. }
+
+. 
+. *1603
+. forval s = 0(0.003)0.3001 {
+  2.         qui{
+  3.                 getprofits      $teffect 25 .05 .05 23 `s' 0 0
+  4.                 merge 1:1 facilityid using `never_profitable'
+  5.                 keep if pi_1603 >= 0 | never_profitable==1
+  6.                 gen s = `s'
+  7.                 collapse (sum) dQ=dQ_1603 pubexp_1603, by(s flag_1603)
+  8.                 gen plcoe_1603  = pubexp_1603 / dQ
+  9.                 if `s'==0{
+ 10.                         tempfile 1603
+ 11.                         save `1603', replace
+ 12.                 }
+ 13.                 else{
+ 14.                         append using `1603'
+ 15.                         save `1603', replace
+ 16.                 }
+ 17.         }
+ 18. }
+
+. 
+. *COMBINE RESULTS
+. append using `ptc'
+
+. append using `ptc_noTE'
+
+. sort flag_1603 s phi
+
+. 
+. replace dQ = dQ / 1e6
+(606 real changes made)
+
+. 
+. gen case = "1603" if s!=.
+(404 missing values generated)
+
+. replace case = "PTC" if phi!=. & plcoe_ptc!=.
+(202 real changes made)
+
+. replace case = "PTC - no TE" if phi!=. & plcoe_ptc_noTE!=.
+variable case was str4 now str11
+(202 real changes made)
+
+. 
+. save plotdat, replace
+(note: file plotdat.dta not found)
+file plotdat.dta saved
+
+. 
+. *PLOT 1603 PLANTS
+. use plotdat, clear
+
+. keep if flag_1603==1
+(303 observations deleted)
+
+. twoway line plcoe_1603 dQ if case=="1603", lcolor(dkgreen) ///
+>         || line plcoe_ptc_noTE dQ if case=="PTC - no TE", lpattern(shortdash) lcolor(navy) ///
+>         || line plcoe_ptc dQ if case=="PTC", lpattern(longdash) lcolor(navy) ///
+>         || scatter plcoe_1603 dQ if round(s, 0.0001)==0.3 & case=="1603", msymbol(circle) color(dkgreen) ///
+>         || scatter plcoe_ptc dQ if round(phi,0.001)==23 & case=="PTC", msymbol(circle) color(navy) ///
+>         , ytitle("Public LCOE ($/MWh)") xtitle("Electricity Generation (TWh)") ylabel(0(5)20) /// note("1603 reci
+> pients only.")
+>         legend(order(1 "Investment" 2 "Output - Fixed Q" 3 "Output" 4 "Observed Subsidy Level"))
+
+. graph export "$repodir/output/figures/plcoe_plot_1603plants.png", replace
+(note: file D:\GitDir\Projects\ags_capital_vs_output/output/figures/plcoe_plot_1603plants.png not found)
+(file D:\GitDir\Projects\ags_capital_vs_output/output/figures/plcoe_plot_1603plants.png written in PNG format)
+
+. 
+. *PLOT PTC PLANTS
+. use plotdat, clear
+
+. keep if flag_1603==0
+(303 observations deleted)
+
+. twoway line plcoe_1603 dQ if case=="1603", color(dkgreen) ///
+>         || line plcoe_ptc_noTE dQ if case=="PTC - no TE", lpattern(shortdash) color(navy) ///
+>         || line plcoe_ptc dQ if case=="PTC", lpattern(longdash) color(navy) ///
+>         || scatter plcoe_1603 dQ if round(s, 0.0001)==0.3 & case=="1603", msymbol(circle) color(dkgreen) ///
+>         || scatter plcoe_ptc dQ if round(phi,0.001)==23 & case=="PTC", msymbol(circle) color(navy) ///
+>         , ytitle("Public LCOE ($/MWh in PDV terms)") xtitle("Electricity Generation (TWh in PDV terms)") ///
+>         legend(order(1 "Investment" 2 "Output - Fixed Q" 3 "Output" 4 "Observed Subsidy Level")) note("PTC recipi
+> ents only.")
+
+. * graph export "$repodir/output/figures/plcoe_plot_PTCplants.png", replace
+. 
+. *PLOT PLANTS TOGETHER
+. use plotdat, clear
+
+. collapse (sum) dQ pubexp*, by(case phi s)
+
+. gen plcoe_1603 = pubexp_1603/(dQ*1e6)
+
+. gen plcoe_ptc = pubexp_ptc/(dQ*1e6)
+
+. gen plcoe_ptc_noTE = pubexp_ptc_noTE/(dQ*1e6)
+
+. 
+. 
+. save plotdat_all, replace
+(note: file plotdat_all.dta not found)
+file plotdat_all.dta saved
+
+. 
+. twoway line plcoe_1603 dQ if case=="1603", color(dkgreen) ///
+>         || line plcoe_ptc_noTE dQ if case=="PTC - no TE", lpattern(shortdash) color(navy) ///
+>         || line plcoe_ptc dQ if case=="PTC", lpattern(longdash) color(navy) ///
+>         || scatter plcoe_1603 dQ if round(s, 0.0001)==0.3 & case=="1603", msymbol(circle) color(dkgreen) ///
+>         || scatter plcoe_ptc dQ if round(phi,0.001)==23 & case=="PTC", msymbol(circle) color(navy) ///
+>         , ytitle("Public LCOE ($/MWh)") xtitle("Electricity Generation (TWh)") ylabel(0(5)20) ///
+>         legend(order(1 "Investment" 2 "Output - Fixed Q" 3 "Output" 4 "Observed Subsidy Level"))
+
+. graph export "$repodir/output/figures/plcoe_plot_all.png", replace
+(note: file D:\GitDir\Projects\ags_capital_vs_output/output/figures/plcoe_plot_all.png not found)
+(file D:\GitDir\Projects\ags_capital_vs_output/output/figures/plcoe_plot_all.png written in PNG format)
+
+. 
+. *SUMMARY MEASURES FOR TEXT *****************************************
+. 
+. 
+. *MMWh WITH NO SUBSIDY
+. use plotdat, clear
+
+. keep if flag_1603==1 & s==0
+(605 observations deleted)
+
+. replace dQ = 100*floor(dQ/100) // not ideal but floor doesn't take a second argument like round
+(1 real change made)
+
+. local ce_nosubsidy_dQ = dQ
+
+. file open myfile using "$repodir/output/estimates/ce_nosubsidy_dQ.tex", write text replace 
+(note: file D:\GitDir\Projects\ags_capital_vs_output/output/estimates/ce_nosubsidy_dQ.tex not found)
+
+. file write myfile "`ce_nosubsidy_dQ'"
+
+. file close myfile
+
+. 
+. 
+. *GET OUTPUT SUBSIDY (phi=?) THAT IS EQUIVALENT IN MMWh TO ACTUAL SUBSIDY (s=.3)
+. 
+. ** 1603 PLANTS ONLY ---------------
+. *1603 case numbers
+. use plotdat, clear
+
+. keep if flag_1603==1 & round(s, 0.0001)==0.3
+(605 observations deleted)
+
+. local ce_1603_dQ = dQ
+
+. local ce_1603_plcoe = round(plcoe_1603,0.01)
+
+. file open myfile using "$repodir/output/estimates/ce_1603_plcoe.tex", write text replace 
+(note: file D:\GitDir\Projects\ags_capital_vs_output/output/estimates/ce_1603_plcoe.tex not found)
+
+. file write myfile "`ce_1603_plcoe'"
+
+. file close myfile
+
+. 
+. *PTC case numbers
+. use plotdat, clear
+
+. keep if flag_1603==1 & case=="PTC"
+(505 observations deleted)
+
+. gen dQ_diff = abs(dQ - `ce_1603_dQ')
+
+. egen min_dQ_diff = min(dQ_diff)
+
+. keep if min_dQ_diff==dQ_diff
+(100 observations deleted)
+
+. 
+. local ce_1603equivalentPTC_phi = round(phi,0.01)
+
+. file open myfile using "$repodir/output/estimates/ce_1603equivalentPTC_phi.tex", write text replace 
+(note: file D:\GitDir\Projects\ags_capital_vs_output/output/estimates/ce_1603equivalentPTC_phi.tex not found)
+
+. file write myfile "`ce_1603equivalentPTC_phi'"
+
+. file close myfile
+
+. 
+. local ce_1603equivalentPTC_plcoe = round(plcoe_ptc,0.01)
+
+. file open myfile using "$repodir/output/estimates/ce_1603equivalentPTC_plcoe.tex", write text replace 
+(note: file D:\GitDir\Projects\ags_capital_vs_output/output/estimates/ce_1603equivalentPTC_plcoe.tex not found)
+
+. file write myfile "`ce_1603equivalentPTC_plcoe'"
+
+. file close myfile
+
+. 
+. * relative cost per MMWh
+. local ce_1603equivalentPTC_plcoe_pct = round( (`ce_1603_plcoe' - `ce_1603equivalentPTC_plcoe') / `ce_1603_plcoe' 
+> * 100 )
+
+. file open myfile using "$repodir/output/estimates/ce_1603equivalentPTC_plcoe_pct.tex", write text replace 
+(note: file D:\GitDir\Projects\ags_capital_vs_output/output/estimates/ce_1603equivalentPTC_plcoe_pct.tex not found)
+
+. file write myfile "`ce_1603equivalentPTC_plcoe_pct'"
+
+. file close myfile
+
+. 
+. ** ALL PLANTS---------------
+. *1603 case numbers
+. use plotdat_all, clear
+
+. keep if round(s, 0.0001)==0.3
+(302 observations deleted)
+
+. local ce_1603_dQ = dQ
+
+. local ce_1603_plcoe = round(plcoe_1603,0.01)
+
+. file open myfile using "$repodir/output/estimates/ce_1603_plcoe_allplants.tex", write text replace 
+(note: file D:\GitDir\Projects\ags_capital_vs_output/output/estimates/ce_1603_plcoe_allplants.tex not found)
+
+. file write myfile "`ce_1603_plcoe'"
+
+. file close myfile
+
+. 
+. *PTC case numbers
+. use plotdat_all, clear
+
+. keep if case=="PTC"
+(202 observations deleted)
+
+. gen dQ_diff = abs(dQ - `ce_1603_dQ')
+
+. egen min_dQ_diff = min(dQ_diff)
+
+. keep if min_dQ_diff==dQ_diff
+(100 observations deleted)
+
+. 
+. local ce_1603equivalentPTC_phi = round(phi,0.01)
+
+. file open myfile using "$repodir/output/estimates/ce_1603equivalentPTC_phi_allplants.tex", write text replace 
+(note: file D:\GitDir\Projects\ags_capital_vs_output/output/estimates/ce_1603equivalentPTC_phi_allplants.tex not fo
+> und)
+
+. file write myfile "`ce_1603equivalentPTC_phi'"
+
+. file close myfile
+
+. 
+. local ce_1603equivalentPTC_plcoe = round(plcoe_ptc,0.01)
+
+. file open myfile using "$repodir/output/estimates/ce_1603equivalentPTC_plcoe_allplants.tex", write text replace 
+(note: file D:\GitDir\Projects\ags_capital_vs_output/output/estimates/ce_1603equivalentPTC_plcoe_allplants.tex not 
+> found)
+
+. file write myfile "`ce_1603equivalentPTC_plcoe'"
+
+. file close myfile
+
+. 
+. * relative cost per MMWh
+. local ce_1603equivalentPTC_plcoe_pct = round( (`ce_1603_plcoe' - `ce_1603equivalentPTC_plcoe') / `ce_1603_plcoe' 
+> * 100 )
+
+. file open myfile using "$repodir/output/estimates/ce_1603equivalentPTC_plcoe_pct_allplants.tex", write text repla
+> ce 
+(note: file D:\GitDir\Projects\ags_capital_vs_output/output/estimates/ce_1603equivalentPTC_plcoe_pct_allplants.tex 
+> not found)
+
+. file write myfile "`ce_1603equivalentPTC_plcoe_pct'"
+
+. file close myfile
+
+. 
+. *GET 1603 SUBSIDY (s=?) THAT IS EQUIVALENT IN MMWh TO PTC-noTE at $23/MWh
+. *PTC - no TE case numbers
+. use plotdat, clear
+
+. keep if flag_1603==1 & phi==23 & case=="PTC - no TE"
+(605 observations deleted)
+
+. local ce_PTCnoTE_dQ = dQ
+
+. local ce_PTCnoTE_plcoe = round(plcoe_ptc_noTE,0.01)
+
+. file open myfile using "$repodir/output/estimates/ce_PTCnoTE_plcoe.tex", write text replace 
+(note: file D:\GitDir\Projects\ags_capital_vs_output/output/estimates/ce_PTCnoTE_plcoe.tex not found)
+
+. file write myfile "`ce_PTCnoTE_plcoe'"
+
+. file close myfile
+
+. 
+. *1603 case numbers
+. use plotdat, clear
+
+. keep if flag_1603==1 & case=="1603"
+(505 observations deleted)
+
+. gen dQ_diff = abs(dQ - `ce_PTCnoTE_dQ')
+
+. egen min_dQ_diff = min(dQ_diff)
+
+. keep if min_dQ_diff==dQ_diff
+(96 observations deleted)
+
+. sort s
+
+. keep in 1 // minimum subsidy that achieves dQ
+(4 observations deleted)
+
+. 
+. local ce_PTCnoTEequivalent1603_s = round(s,0.01)
+
+. file open myfile using "$repodir/output/estimates/ce_PTCnoTEequivalent1603_s.tex", write text replace 
+(note: file D:\GitDir\Projects\ags_capital_vs_output/output/estimates/ce_PTCnoTEequivalent1603_s.tex not found)
+
+. file write myfile "`ce_PTCnoTEequivalent1603_s'"
+
+. file close myfile
+
+. 
+. local ce_PTCnoTEequivalent1603_plcoe = round(plcoe_1603,0.01)
+
+. file open myfile using "$repodir/output/estimates/ce_PTCnoTEequivalent1603_plcoe.tex", write text replace 
+(note: file D:\GitDir\Projects\ags_capital_vs_output/output/estimates/ce_PTCnoTEequivalent1603_plcoe.tex not found)
+
+. file write myfile "`ce_PTCnoTEequivalent1603_plcoe'"
+
+. file close myfile
+
+. 
+. 
+. ********************************************************************************
+. cap graph close
+
+. tempsetup
+D:\GitDir\Projects\ags_capital_vs_output\temp
+
+. capture log close

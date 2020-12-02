@@ -1,0 +1,591 @@
+-------------------------------------------------------------------------------------------------------------------------------------------
+      name:  <unnamed>
+       log:  D:\GitDir\Projects\ags_capital_vs_output/output/logs/awea_prep.txt
+  log type:  text
+ opened on:  20 Mar 2019, 21:45:54
+
+. ********************************************************************************
+. global awea_data "$dropbox\Data\proprietary\awea"
+
+. ********************************************************************************
+. *                       PROGRAMS TO FACILITATE AWEA-EIA MATCHING
+. ********************************************************************************
+. 
+. 
+. /* FUNCTION 1: For large plants, AWEA lists it only once 
+>                            whereas EIA gives an ID to the sub-plants within the large plant
+>          
+>          Example:
+>          Say we know AWEA Observation with ID 1 maps to 2, 3 in EIA
+>          Then:
+>         
+>          Before:                           After: 
+>          ID      Turbine                   ID            Turbine
+>          1       "Vestas"                  1             "Vestas"
+>                                            2             "Vestas"
+>                                            3             "Vestas"
+> The matching information was put together by RA Jeff Bryant        */
+. capture program drop awea_to_eia_match 
+
+. program define awea_to_eia_match 
+  1.         /* First part of the program is we bring in the match information using join-by. Forms
+>            all pair-wise combinations to expand the data. The data includes matching an ID
+>            to itself so we don't lose any observations */
+.            joinby facilityid using "$generated_data/awea_eia_handmatch.dta", unmatched(master)
+  2.            replace facilityid = sub_facilityid if _merge == 3
+  3.            drop _merge sub_facilityid
+  4.            
+.            /* For these two AWEA datasets(turbines and projects), Jeff indicates that ID 56840 of
+>               the Marshall wind farm is the matching ID, but that ID is not in the AWEA data. 58826
+>                   is the ID in the AWEA data that will be expanded to all other marshall wind EIA ID's
+>                   
+>                   Code below creates 4 observation for each one of the 4 other EIA facility ID's in the
+>                   Marshall wind farm
+>            */
+.            foreach fid in 56840 56824 56825 56827 56828{
+  5.                         expand 2 if facilityid == 56826, gen(dup)        
+  6.                         replace facilityid = `fid' if dup == 1
+  7.                         drop dup        
+  8.                 }
+  9. end
+
+. 
+. * FUNCTION 2 - FILL IN OBS WITHOUT EIA FACILITY ID'S 
+. capture program drop fill_id
+
+. program define fill_id
+  1.         
+.         *FOUND BY JEFF BRYANT
+.         replace facilityid = 7769  if eiaplantname == "Lalamilo Windfarm" & state == "HI"
+  2.         replace facilityid = 50826 if eiaplantname == "Tres Vaqueros Wind Farms LLC" & state == "CA"
+  3.         replace facilityid = 50532 if eiaplantname == "Victory Garden Phase IV LLC" & state == "CA"
+  4.         replace facilityid = 54684 if eiaplantname == "Difwind Farms Ltd VI" & state == "CA"
+  5.         replace facilityid = 58038 if projectphase == "Little Cedar" & state == "IA"
+  6.         
+.         * ADDITIONAL MATCHES BY BLAKE BARR
+.         replace facilityid = 59637 if projectphase == "Adams"        & state == "IA"
+  7.         replace facilityid = 59734 if projectphase == "Briscoe"      & state == "TX"
+  8.         replace facilityid = 59975 if projectphase == "Carousel"     & state == "CO"
+  9.         replace facilityid = 54684 if projectphase == "Difwind 4"    & state == "CA"
+ 10.         replace facilityid = 60049 if projectphase == "Golden Hills" & state == "CA"
+ 11. 
+.         replace facilityid = 59732 if  projectphase == "Green Pastures I" &  state == "TX"
+ 12.         replace facilityid = 59733 if  projectphase == "Green Pastures II" & state == "TX"
+ 13. 
+.         replace facilityid = 59442 if projectphase == "Logan's Gap Wind" & state == "TX"
+ 14. 
+.         replace facilityid = 60059 if projectphase == "Los Vientos V" & state == "TX"
+ 15.         replace facilityid = 59435 if projectphase == "Oak Tree"      & state == "SD"
+ 16.         replace facilityid = 59475 if projectphase == "Palo Duro"     & state == "TX"
+ 17. 
+.         replace facilityid =  60262 if projectphase == "Prairie Breeze II"   & state == "NE"
+ 18.         replace facilityid =  59943 if projectphase == "Rattlesnake"         & state == "TX"
+ 19.         replace facilityid =  59654 if projectphase == "Sendero"             & state == "TX"
+ 20.         replace facilityid =  59034 if projectphase == "Shannon"             & state == "TX"
+ 21.         replace facilityid =  60128 if projectphase == "Zephyr Wind Project" & state == "OH"
+ 22.         
+.         replace facilityid = 58958 if projectphase == "Camelot Wind Project" & state == "MA"
+ 23.         replace facilityid = 59118 if projectphase == "Cameron"              & state == "TX"
+ 24.         replace facilityid = 59655 if projectphase == "Campbell County"      & state == "SD"
+ 25.         replace facilityid = 60069 if projectphase == "Cedar Bluff"          & state == "KS"
+ 26.         replace facilityid = 59147 if projectphase == "Fairwind"             & state == "MD"
+ 27.         replace facilityid = 59725 if projectphase == "Fairhaven Wind"       & state == "MA"
+ 28.         replace facilityid = 59328 if projectphase == "Golden Acorn Casino"  & state == "CA"
+ 29.         replace facilityid = 59974 if projectphase == "Golden West Wind Farm" & state == "CO"
+ 30.         replace facilityid = 59776 if projectphase == "Heartland Community College" & state == "IL"
+ 31.         replace facilityid = 60104 if projectphase == "Javelina" & state == "TX"
+ 32.         replace facilityid = 59460 if projectphase == "Kay Wind" & state == "OK"
+ 33.         replace facilityid = 59022 if projectphase == "Kingston" & state == "MA"
+ 34.         replace facilityid = 59735 if projectphase == "Kirkwood Community College" & state == "IA"
+ 35.         replace facilityid = 59837 if projectphase == "Slate Creek" & state == "KS"
+ 36.         replace facilityid = 58995 if projectphase == "St. Olaf Wind Project" & state == "MN"
+ 37.         replace facilityid = 58927 if projectphase == "Story City Wind Project" & state == "IA"
+ 38.         replace facilityid = 59621 if projectphase == "Jumbo Road" & state == "TX"
+ 39.         replace facilityid = 58932 if projectphase == "Traer Wind Project" & state == "IA"
+ 40.         replace facilityid = 59736 if projectphase == "Valentine" & state == "NE"
+ 41.         replace facilityid = 59724 if projectphase == "Scituate Wind" & state == "MA"
+ 42.         
+.         replace facilityid = 50821 if projectphase == "Mojave 16"
+ 43.         replace facilityid = 50822 if projectphase == "Mojave 17"
+ 44.         replace facilityid = 50823 if projectphase == "Mojave 18"
+ 45.         
+.         
+. end
+
+. 
+. /* ADDITIONAL MATCHES FOUND BY: CP, TG, and RS. 
+>         This data-set will be used below to
+>     link and expand AWEA ID's into multiple ID's in EIA
+> */
+. input facilityid    sub_facilityid
+
+     facilit~d  sub_fac~d
+  1.            54298          54298                  
+  2.            54298          54297                 
+  3.            54298          54299                 
+  4.            54298          54300                 
+  5.            55719          55719                  
+  6.            55719          55720                  
+  7.            55560          55560                 
+  8.            55560          55989                  
+  9.            56201          56201                
+ 10.            56201          56202                  
+ 11.            56201          56204                 
+ 12.            56201          56205                  
+ 13.            56216          56216                  
+ 14.            56216          56218                 
+ 15.            56275          56275                  
+ 16.            56275          52165                  
+ 17.            56275          56276                  
+ 18.            56413          56413                  
+ 19.            56413          56409                 
+ 20.            56413          56410                  
+ 21.            56413          56411                 
+ 22.            56413          56412                
+ 23.            59331          59331                  
+ 24.            59331          57791                 
+ 25.            57098          57098                
+ 26.            57098          57922
+ 27.            58465          58465                 
+ 28.            58465          58464                 
+ 29.            58940          58940                 
+ 30.            58940          58939                  
+ 31. end
+
+. tempfile additional_matches
+
+. save "`additional_matches'"
+file C:\Users\Rich\AppData\Local\Temp\ST_42f8_000001.tmp saved
+
+. 
+. ********************************************************************************
+. *                                                               TURBINE DATA
+. ********************************************************************************
+. 
+. * We are only interested in AWEA turbine data 
+. * for those EIA facilities that do not have a turbine
+. use "$generated_data/eia_static.dta", clear
+
+. keep if manufacturer_eia == "" & model_eia == ""
+(937 observations deleted)
+
+. keep facilityid
+
+. tempfile eia_without_turbines
+
+. save "`eia_without_turbines'"
+file C:\Users\Rich\AppData\Local\Temp\ST_42f8_000002.tmp saved
+
+. 
+. * BRING IN AWEA TURBINE DATA
+. import delimited using "$awea_data/turbines.csv", clear
+(43 vars, 56,391 obs)
+
+. ren eiaplantid facilityid
+
+. 
+. 
+. * MATCH a couple AWEA facilities TO EIA
+. fill_id
+(86 real changes made)
+(86 real changes made)
+(96 real changes made)
+(251 real changes made)
+(1 real change made)
+(64 real changes made)
+(81 real changes made)
+(88 real changes made)
+(77 real changes made)
+(48 real changes made)
+(50 real changes made)
+(50 real changes made)
+(87 real changes made)
+(55 real changes made)
+(11 real changes made)
+(147 real changes made)
+(41 real changes made)
+(118 real changes made)
+(39 real changes made)
+(119 real changes made)
+(3 real changes made)
+(1 real change made)
+(55 real changes made)
+(55 real changes made)
+(1 real change made)
+(12 real changes made)
+(2 real changes made)
+(1 real change made)
+(147 real changes made)
+(1 real change made)
+(147 real changes made)
+(130 real changes made)
+(1 real change made)
+(1 real change made)
+(75 real changes made)
+(1 real change made)
+(1 real change made)
+(162 real changes made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(0 real changes made)
+(0 real changes made)
+(0 real changes made)
+
+. replace turbinemodel = "S88" if facilityid == 57248 
+(1 real change made)
+
+. 
+. *CONSTRUCT FOOTPRINT 
+. egen awea_long_max =  max(turbinelongitude), by(facilityid)
+(3529 missing values generated)
+
+. egen awea_long_min =  min(turbinelongitude), by(facilityid)
+(3529 missing values generated)
+
+. 
+. egen awea_lat_max =  max(turbinelatitude), by(facilityid)
+(3529 missing values generated)
+
+. egen awea_lat_min =  min(turbinelatitude), by(facilityid)
+(3529 missing values generated)
+
+. 
+. egen awea_geo_turbines = count(turbinelatitude), by(facilityid)
+
+. egen awea_geo_MW = sum(turbinecapacitymw), by(facilityid)
+
+. 
+. geodist awea_lat_max awea_long_max awea_lat_max awea_long_min , generate(xdist) miles
+
+. geodist awea_lat_max awea_long_max awea_lat_min awea_long_max, generate(ydist) miles
+
+. 
+. gen awea_area = xdist*ydist
+(3,529 missing values generated)
+
+. 
+. /* GOING TO TAKE THE MODE OF THE MANUFACTURER AND MODEL IN AWEA
+>    THE MODE WILL RETURN EMPTY IF THERE ARE TIES. 
+>    
+>    THERE ARE MANY TIES, HOWEVER
+>    WE ARE ONLY USING THIS DATA IF THE FACILITY DOES NOT HAVE EIA DATA
+>    
+>    SO GENERATE MODE AND GOOGLE SEARCH FACILITIES THAT HAVE TIES FOR WHICH WE HAVE NO EIA DATA
+> */
+. merge m:1 facilityid using "`eia_without_turbines'", keep(master matched)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                        55,644
+        from master                    55,644  (_merge==1)
+        from using                          0  (_merge==2)
+
+    matched                               747  (_merge==3)
+    -----------------------------------------
+
+. 
+. 
+. * THIS FACILITTY NEEDED TO BE CHANGED NO MODE - GOOGLED SEARCHED
+. replace turbinemanufacturer = "vestas" if facilityid == 7769
+(86 real changes made)
+
+. replace turbinemodel = "v47-660"       if facilityid == 7769
+(86 real changes made)
+
+. 
+. /* The following loop generated manufacturer and model mode. It then checks to make sure
+>    of turbines with no data in eia (we will need the awea data) 
+>    the modes are not missing
+> */
+. foreach t in manufacturer model {
+  2.         bys facilityid: egen awea_`t' = mode(turbine`t')
+  3.         replace awea_`t' = lower(awea_`t')
+  4.         qui count if awea_`t' == "" & _merge == 3
+  5.         assert `r(N)' == 0
+  6. }
+Warning: at least one group contains all missing values or contains multiple modes.  Generating missing values for the mode of these
+groups.  Use the missing, maxmode, minmode, or nummode() options to control this behavior.
+(28 missing values generated)
+(56,277 real changes made)
+Warning: at least one group contains all missing values or contains multiple modes.  Generating missing values for the mode of these
+groups.  Use the missing, maxmode, minmode, or nummode() options to control this behavior.
+(98 missing values generated)
+(26,997 real changes made)
+
+. 
+. bys facilityid: gen tn = _n
+
+. keep if tn == 1
+(55,494 observations deleted)
+
+. drop tn
+
+. 
+. keep facilityid awea_manufacturer awea_model awea_geo_turbines awea_geo_MW awea_area
+
+. 
+. * Fill in exact AWEA to EIA matches using program above
+. awea_to_eia_match
+(38 real changes made)
+(1 observation created)
+(1 real change made)
+(1 observation created)
+(1 real change made)
+(1 observation created)
+(1 real change made)
+(1 observation created)
+(1 real change made)
+(1 observation created)
+(1 real change made)
+
+. 
+. * Bring in additional matches (in dataset above)
+. joinby facilityid using "`additional_matches'", unmatched(master)
+
+. replace facilityid = sub_facilityid if _merge == 3
+(19 real changes made)
+
+. drop _merge sub_facilityid
+
+. 
+. compress
+  variable awea_geo_turbines was float now int
+  variable facilityid was double now long
+  variable awea_manufacturer was str72 now str33
+  variable awea_model was str18 now str16
+  (45,073 bytes saved)
+
+. sort facilityid 
+
+. tempfile awea_turbines
+
+. save "`awea_turbines'"
+file C:\Users\Rich\AppData\Local\Temp\ST_42f8_000003.tmp saved
+
+. ********************************************************************************
+. *                                                       AWEA PPA DATA
+. ********************************************************************************
+. import delimited using "$awea_data\projects.csv", clear
+(42 vars, 1,073 obs)
+
+. ren eiaplantid facilityid
+
+. order facilityid
+
+. 
+. keep facilityid powerpurchasertype pparate ppastartyear ppaendyear ///
+>      mwcontracted offtaketype eiaplantname state projectphase ///
+>          powerpurchasertypedetails powerpurchaser ppaduration
+
+. 
+. * DEAL WITH OBSERVATIONS THAT HAVE MULTIPLE ID'S SEPERATED BY COMMA
+. gen flag_awea = regexm(facilityid, ",")
+
+. 
+. * GOING TO SPLIT INTO SEPERATE VARIABLES AND THEN RESHAPE
+. preserve
+
+.         keep if flag_awea == 1 
+(1,016 observations deleted)
+
+.         split facilityid, parse(",")
+variables created as string: 
+facilityid1   facilityid3   facilityid5   facilityid7   facilityid9   facilityid11
+facilityid2   facilityid4   facilityid6   facilityid8   facilityid10
+
+.         gen n = _n //for the reshape
+
+.         drop facilityid
+
+.         reshape long facilityid, i(n) j(fid)
+(note: j = 1 2 3 4 5 6 7 8 9 10 11)
+
+Data                               wide   ->   long
+-----------------------------------------------------------------------------
+Number of obs.                       57   ->     627
+Number of variables                  25   ->      16
+j variable (11 values)                    ->   fid
+xij variables:
+facilityid1 facilityid2 ... facilityid11  ->   facilityid
+-----------------------------------------------------------------------------
+
+.         destring facilityid, replace
+facilityid: all characters numeric; replaced as long
+(468 missing values generated)
+
+.         drop if facilityid == .
+(468 observations deleted)
+
+.         drop n fid
+
+.         replace flag_awea = 2
+(159 real changes made)
+
+.         tempfile expansion
+
+.         save "`expansion'", replace
+(note: file C:\Users\Rich\AppData\Local\Temp\ST_42f8_000005.tmp not found)
+file C:\Users\Rich\AppData\Local\Temp\ST_42f8_000005.tmp saved
+
+. restore
+
+. 
+. drop if flag == 1
+(57 observations deleted)
+
+. destring facilityid, replace
+facilityid: all characters numeric; replaced as long
+(295 missing values generated)
+
+. 
+. append using "`expansion'"
+
+. 
+. 
+. * Green Pastures needs to be split
+. local both_green projectphase == "Green Pastures I, Green Pastures II"
+
+. expand 2 if `both_green'
+(1 observation created)
+
+. bys projectphase: replace projectphase = "Green Pastures I" if _n == 1 & `both_green'
+(1 real change made)
+
+. replace projectphase = "Green Pastures II" if `both_green'
+(1 real change made)
+
+. 
+. * Mojave 16/17/18 needs to be split
+. local three_mojave projectphase == "Mojave 16/17/18"
+
+. expand 3 if `three_mojave'
+(2 observations created)
+
+. bys projectphase: replace projectphase = "Mojave 16" if `three_mojave' & _n == 1
+(1 real change made)
+
+. bys projectphase: replace projectphase = "Mojave 17" if `three_mojave' & _n == 1
+(1 real change made)
+
+. replace projectphase = "Mojave 18" if `three_mojave' 
+(1 real change made)
+
+. 
+. * INCORPORATE FACILITY ID MATCHES FOUND MANUALLY BY JEFF BRYANT 
+. fill_id
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(0 real changes made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+(1 real change made)
+
+. 
+. drop eiaplantname projectphase state flag
+
+. duplicates drop
+
+Duplicates in terms of all variables
+
+(33 observations deleted)
+
+. 
+. * Bring in exact AWEA - EIA matches using program
+. awea_to_eia_match
+(38 real changes made)
+(1 observation created)
+(1 real change made)
+(1 observation created)
+(1 real change made)
+(1 observation created)
+(1 real change made)
+(1 observation created)
+(1 real change made)
+(1 observation created)
+(1 real change made)
+
+. 
+. * Bring in additional matches (in dataset above)
+. joinby facilityid using "`additional_matches'", unmatched(master)
+
+. replace facilityid = sub_facilityid if _merge == 3
+(20 real changes made)
+
+. drop _merge sub_facilityid
+
+. 
+. drop if facilityid == . 
+(226 observations deleted)
+
+. sort facilityid, stable //stable ensures that ties on facilityid always sort same order
+
+. collapse (firstnm) *ppa* offtaketype mwcontracted ///
+>                                    powerpurchaser powerpurchasertype powerpurchasertypedetails, by(facilityid)
+
+.                                 
+. * COMBINE TURBINE AND PPA
+. merge 1:1 facilityid using "`awea_turbines'", keep(matched master) nogen
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             3
+        from master                         3  
+        from using                          0  
+
+    matched                               957  
+    -----------------------------------------
+
+. 
+. compress
+  variable facilityid was double now long
+  (3,840 bytes saved)
+
+. sort facilityid
+
+. save "$generated_data/awea.dta", replace
+file D:/Dropbox/projects/joe_aldy/1603/generated_data/awea.dta saved
+
+. ********************************************************************************
+. tempsetup
+D:\GitDir\Projects\ags_capital_vs_output\temp
+
+. capture log close

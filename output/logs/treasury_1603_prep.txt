@@ -1,0 +1,111 @@
+----------------------------------------------------------------------------------------------------------------------------------------
+      name:  <unnamed>
+       log:  D:\GitDir\Projects\ags_capital_vs_output/output/logs/treasury_1603_prep.txt
+  log type:  text
+ opened on:  20 Mar 2019, 19:23:31
+
+. ********************************************************************************
+. import excel using "$dropbox/Data/proprietary/treasury/treasury_eia_match.xlsx", clear first case(lower)
+
+. rename (facilityid_eia sample) (facilityid flag_sample_1603)
+
+. keep facilityid tan award_date amount_funded  flag_sample_1603
+
+. destring facilityid, replace
+facilityid: all characters numeric; replaced as long
+(153 missing values generated)
+
+. drop if facilityid == .
+(153 observations deleted)
+
+. drop if facilityid == 56608 & tan == 20256 //could not match to our sample
+(1 observation deleted)
+
+. 
+. * Projects with multiple awards (diff. phases). Sum amount by facilityID 
+. duplicates tag facilityid, gen(dup)
+
+Duplicates in terms of facilityid
+
+. preserve 
+
+.          keep if dup > 0
+(241 observations deleted)
+
+.          collapse (sum) amount_funded (count) n_1603_grants = amount_funded (firstnm) flag_sample_1603 , by(facilityid)
+
+.      tempfile multiple_grants
+
+.          save "`multiple_grants'"
+file C:\Users\Rich\AppData\Local\Temp\ST_44f8_000002.tmp saved
+
+. restore
+
+. 
+. drop if dup > 0
+(66 observations deleted)
+
+. append using "`multiple_grants'"
+(note: variable amount_funded was long, now double to accommodate using data's values)
+
+. 
+. replace n_1603_grants = 1 if n_1603_grants == . //for facilities w/o dups
+(241 real changes made)
+
+. *Generate flag for the 6 plants that have funding across multiple years
+. gen multiple_years = cond(inlist(facilityid, 56961, 57131, 57159, 57189, 57303, 57867), 1, 0)
+
+. gen multiple_grants = cond(tan == ., 1, 0)
+
+. 
+. gen a1603 = 1
+
+. 
+. replace award_date = "17-Dec-12" if award_date == "December 17, 2012"
+(1 real change made)
+
+. gen date = date(award_date, "DMY", 2020)
+(17 missing values generated)
+
+. drop award_date dup tan
+
+. ren date award_date
+
+. format award_date %td
+
+. 
+. la var n_1603_grants   "Number of obs in Treasury data"
+
+. la var multiple_grants "Multiple 1603 Grants Indicator for Various Phases - (amount funded summed)"
+
+. la var multiple_years  "Multiple 1603 Grants Across Years"
+
+. la var amount_funded   "1603 Award Amount in USD"
+
+. la var award_date          "1603 Award Date"
+
+. la var a1603               "Indicator for receiving 1603 Grant"
+
+. 
+. sort facilityid
+
+. order facilityid award_date
+
+. compress
+  variable award_date was float now int
+  variable n_1603_grants was long now byte
+  variable multiple_years was float now byte
+  variable multiple_grants was float now byte
+  variable a1603 was float now byte
+  variable amount_funded was double now long
+  (4,644 bytes saved)
+
+. save "$generated_data/1603_info.dta", replace
+(note: file D:/Dropbox/projects/joe_aldy/1603/generated_data/1603_info.dta not found)
+file D:/Dropbox/projects/joe_aldy/1603/generated_data/1603_info.dta saved
+
+. ********************************************************************************
+. tempsetup
+D:\GitDir\Projects\ags_capital_vs_output\temp
+
+. capture log close

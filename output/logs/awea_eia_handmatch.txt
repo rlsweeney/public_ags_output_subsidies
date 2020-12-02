@@ -1,0 +1,43 @@
+----------------------------------------------------------------------------------------------------------------------------------------
+      name:  <unnamed>
+       log:  D:\GitDir\Projects\ags_capital_vs_output/output/logs/awea_eia_handmatch.txt
+  log type:  text
+ opened on:  20 Mar 2019, 19:19:19
+
+. ********************************************************************************
+. import excel "$dropbox\Data\proprietary\awea\eia_awea_handmatches.xlsx", sheet("Sheet1") firstrow clear
+
+. renvars, lower
+
+. 
+. *The matched ID needs to be mapped to every other ID in the group (name)
+. bys name: gen primary_fid = facilityid if eiaaweamatch == "matched"
+(43 missing values generated)
+
+. order primary_fid
+
+. sort name eiaaweamatch
+
+. carryforward primary_fid, replace
+primary_fid:  (43 real changes made)
+
+. 
+. keep primary_fid facilityid
+
+. 
+. *Now I have a list of facilities in AWEA mapped to the right facility in EIA
+. rename facilityid sub_facilityid
+
+. rename primary_fid facilityid
+
+. sort facilityid sub_facilityid
+
+. save "$generated_data/awea_eia_handmatch.dta", replace
+(note: file D:/Dropbox/projects/joe_aldy/1603/generated_data/awea_eia_handmatch.dta not found)
+file D:/Dropbox/projects/joe_aldy/1603/generated_data/awea_eia_handmatch.dta saved
+
+. ********************************************************************************
+. tempsetup
+D:\GitDir\Projects\ags_capital_vs_output\temp
+
+. capture log close

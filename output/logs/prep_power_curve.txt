@@ -1,0 +1,517 @@
+-------------------------------------------------------------------------------------------------------------------------------------------
+      name:  <unnamed>
+       log:  D:\GitDir\Projects\ags_capital_vs_output/output/logs/prep_power_curve.txt
+  log type:  text
+ opened on:  20 Mar 2019, 21:46:47
+
+. ********************************************************************************
+. global powercurves "$dropbox/Data/public/Databasepowercurves(August2015)"
+
+. ********************************************************************************
+. * Program to lower manufacturer and model names
+. capture program drop lower_names
+
+. program define lower_names
+  1.         foreach var in turbinemanufacturer turbinemodel {
+  2.                 replace `var' = lower(`var')
+  3.                 replace `var' = trim(`var')
+  4.         }
+  5. end
+
+. ***********************************************************************
+. * POWER CURVES FROM http://www.wind-power-program.com/download.htm
+. ***********************************************************************
+. 
+. cd "$powercurves"
+D:\Dropbox\projects\joe_aldy\1603\Data\public\Databasepowercurves(August2015)
+
+. 
+. *Search cursively for power curve files
+. if c(os) == "MacOSX" {
+.         ! find `pwd` -name *.pow > filenames.txt
+. }
+
+. else if c(os) == "Windows" {
+.         ! dir *.pow /b /s > filenames.txt
+. }
+
+. 
+. * LOOP THROUGH ALL OF THE POW FILES AND THEN APPEND
+. local counter = 0
+
+. file open all_powercurves using filenames.txt, read text
+
+. file read all_powercurves f
+
+. while r(eof) == 0 { //go until you reach end of file(eof)
+  2. 
+.         qui infile str100 turbinfo1-turbinfo5 str10 w1-w30 str100 notes1-notes250 ///
+>                 using "`f'", clear 
+  3.         qui egen str1000 note = concat(notes*), punct(" ")
+  4.         drop notes*
+  5.         gen fname = "`f'"
+  6.         local counter = `counter' + 1
+  7.         tempfile power_curve`counter'
+  8.         qui save "`power_curve`counter''"
+  9.         file read all_powercurves f
+ 10. }
+
+. file close all_powercurves
+
+. 
+. clear 
+
+. forval y = 1 / `counter' {
+  2.         append using "`power_curve`y''"
+  3. }
+(note: variable note was str696, now str1003 to accommodate using data's values)
+(note: variable fname was str151, now str155 to accommodate using data's values)
+(note: variable note was str1003, now str1186 to accommodate using data's values)
+(note: variable fname was str155, now str158 to accommodate using data's values)
+(note: variable fname was str158, now str172 to accommodate using data's values)
+(note: variable fname was str172, now str179 to accommodate using data's values)
+(note: variable note was str1186, now str1435 to accommodate using data's values)
+
+. 
+. replace fname = substr(fname, 85, .)
+(236 real changes made)
+
+. 
+. destring w*, replace
+w1: all characters numeric; replaced as byte
+w2: all characters numeric; replaced as double
+w3: all characters numeric; replaced as double
+w4: all characters numeric; replaced as double
+w5: all characters numeric; replaced as double
+w6: all characters numeric; replaced as double
+w7: all characters numeric; replaced as double
+w8: all characters numeric; replaced as double
+w9: all characters numeric; replaced as double
+w10: all characters numeric; replaced as double
+w11: all characters numeric; replaced as double
+w12: all characters numeric; replaced as double
+w13: all characters numeric; replaced as double
+w14: all characters numeric; replaced as double
+w15: all characters numeric; replaced as double
+w16: all characters numeric; replaced as double
+w17: all characters numeric; replaced as double
+w18: all characters numeric; replaced as double
+w19: all characters numeric; replaced as double
+w20: all characters numeric; replaced as double
+w21: all characters numeric; replaced as double
+w22: all characters numeric; replaced as double
+w23: all characters numeric; replaced as double
+w24: all characters numeric; replaced as double
+w25: all characters numeric; replaced as double
+w26: all characters numeric; replaced as double
+w27: all characters numeric; replaced as double
+w28: all characters numeric; replaced as double
+w29: all characters numeric; replaced as double
+w30: all characters numeric; replaced as double
+
+. compress
+  variable turbinfo1 was str100 now str59
+  variable turbinfo2 was str100 now str3
+  variable turbinfo3 was str100 now str1
+  variable turbinfo4 was str100 now str2
+  variable turbinfo5 was str100 now str3
+  variable note was str1435 now str1406
+  variable fname was str179 now str95
+  (128,620 bytes saved)
+
+. gen source = "windpowerprogram/download"
+
+. ren turbinfo1 all
+
+. destring turbinfo*, replace
+turbinfo2: all characters numeric; replaced as int
+turbinfo3: all characters numeric; replaced as byte
+turbinfo4: all characters numeric; replaced as byte
+turbinfo5: all characters numeric; replaced as double
+
+. 
+. ren turbinfo2 rotordiameter
+
+. ren turbinfo4 cutoutspeed
+
+. ren turbinfo5 cutinspeed
+
+. 
+. 
+. * CREATE TURBINEMANUFACTURER
+. gen first_space = strpos(all, " ")
+
+. gen turbinemanufacturer = substr(all, 1, first_space - 1)
+(5 missing values generated)
+
+. drop first_space
+
+. 
+. replace turbinemanufacturer = "GE"        if inlist(turbinemanufacturer, "General",  "GE Energy")
+(4 real changes made)
+
+. replace turbinemanufacturer = "Suzlon"    if substr(all, 1, 6) == "Suzlon" 
+(4 real changes made)
+
+. replace turbinemanufacturer = "Vergnet"   if substr(all, 1, 7) == "Vergnet"
+(5 real changes made)
+
+. replace turbinemanufacturer = "Repower"   if substr(all,1, 7) == "Repower"
+(2 real changes made)
+
+. replace turbinemanufacturer = "Vestas"    if turbinemanufacturer == "Vesta"
+(6 real changes made)
+
+. replace turbinemanufacturer = "f3 Energy" if turbinemanufacturer == "f3"
+(1 real change made)
+
+. 
+. * CREATE TURBINEMODEL - EVERYTHING AFTER TURBINEMANUFACTURER
+. gen turbinemodel = substr(all, strlen(turbinemanufacturer) + 1, .)
+
+. order all turbinemanufacturer turbinemodel
+
+. 
+. 
+. *Get rid of stuff after model. Ex "Manufacturer's graph"
+. foreach ending in  "(M" "(N" "(U" "(f" "(R" "(C" "(I" {
+  2.         gen position = strpos(turbinemodel, "`ending'")
+  3.         * Grab from beginning up to start of manu
+.         replace turbinemodel = substr(turbinemodel , 1 , position - 2 ) if position != 0
+  4.         drop position
+  5. }
+(170 real changes made)
+(2 real changes made)
+(4 real changes made)
+(3 real changes made)
+(1 real change made)
+(3 real changes made)
+(3 real changes made)
+
+. replace turbinemodel = subinstr(turbinemodel, "neral Electric", "", 1)
+(4 real changes made)
+
+. 
+. /* Other Power Curve sources have values for every half of a meter.
+>    use linear interpolation for power curves at half-m/s for new data */
+. gen w0 = 0 
+
+. order all turbinemanufacturer turbinemodel rotordiameter turbinfo3 cutoutspeed cutinspeed w0
+
+. forval i = 0 / 29 {
+  2.         local j = `i' + 1
+  3.         gen w`i'_5 = (w`i'+ w`j') / 2
+  4.         * If next one is 0, replace this as 0
+.         replace w`i'_5 = 0 if w`j' == 0
+  5. }
+(0 real changes made)
+(0 real changes made)
+(0 real changes made)
+(0 real changes made)
+(0 real changes made)
+(0 real changes made)
+(0 real changes made)
+(0 real changes made)
+(0 real changes made)
+(0 real changes made)
+(0 real changes made)
+(0 real changes made)
+(0 real changes made)
+(0 real changes made)
+(4 real changes made)
+(0 real changes made)
+(0 real changes made)
+(0 real changes made)
+(8 real changes made)
+(3 real changes made)
+(42 real changes made)
+(4 real changes made)
+(12 real changes made)
+(3 real changes made)
+(2 real changes made)
+(142 real changes made)
+(1 real change made)
+(2 real changes made)
+(0 real changes made)
+(0 real changes made)
+
+. lower_names
+(236 real changes made)
+(0 real changes made)
+(207 real changes made)
+(216 real changes made)
+
+. drop all rotordiameter turbinfo3 cutoutspeed cutinspeed note
+
+. 
+. * DEAL WITH DUPLICATES TO DEAL WITH MERGE
+. 
+. * KEEP GAIAI FROM NREL
+. drop if turbinemodel == "13m 11kw" & regexm(fname, "MG")
+(1 observation deleted)
+
+. 
+. * ONE SENVION TURBINEMODEL DOESN'T MATCH IT'S FILENAME
+. replace turbinemodel = "3.4 mw 104m" if turbinemodel == "3.4mw 114m" & regexm(fname, "104")
+(1 real change made)
+
+. 
+. drop if turbinemodel == "3.7m 1.9kw" & regexm(fname, "MCS") 
+(1 observation deleted)
+
+. 
+. drop if turbinemodel == "windspot 3.5kw 4.05m" & regexm(fname, "Certification test graph")
+(1 observation deleted)
+
+. 
+. drop if turbinemodel == "vawt 2.6m equiv 2.5kw" & regexm(fname, "Table")
+(1 observation deleted)
+
+. 
+. drop if turbinemodel == "v82-1.65mw" & regexm(fname, "MT")
+(1 observation deleted)
+
+. 
+. *These are the exact same. Exploiting a filename difference to drop one
+. drop if turbinemodel == "huaying hy5-ad5.6 5.6m 5kw" & regexm(fname, "Revolution")
+(1 observation deleted)
+
+. 
+. tempfile powercurves
+
+. save "`powercurves'"
+file C:\Users\Rich\AppData\Local\Temp\ST_42f8_00006x.tmp saved
+
+. 
+. *************************************
+. * POWER CURVES FROM Joern Huenteler
+. *************************************
+. import excel using "$dropbox/Data/proprietary/powercurves/powercurves_from_joern_huenteler.xlsx", clear
+
+. ren (A-E) (id turbinemanufacturer turbinemodel capacity all)
+
+. ren (F-BN) (w0 w0_5 w1 w1_5 w2 w2_5 w3 w3_5     w4 w4_5 w5 w5_5 w6 w6_5 w7 w7_5 w8 w8_5 w9 w9_5 w10 w10_5 ///
+>             w11 w11_5 w12 w12_5 w13     w13_5 w14 w14_5 w15     w15_5 w16 w16_5 w17     w17_5 w18 w18_5 w19     w19_5 ///
+>                         w20     w20_5 w21 w21_5 w22     w22_5 w23 w23_5 w24     w24_5 w25 w25_5 w26     w26_5 w27 w27_5 w28     w28_5 ///
+>                         w29     w29_5 w30)
+
+. gen source = "Joern Huenteler"
+
+. 
+. lower_names
+(244 real changes made)
+(17 real changes made)
+(233 real changes made)
+(6 real changes made)
+
+. replace turbinemanufacturer = "ge" if turbinemanufacturer == "ge energy"
+(3 real changes made)
+
+. replace turbinemanufacturer = "senvion" if turbinemanufacturer == "repower"
+(8 real changes made)
+
+. drop id all capacity
+
+. tempfile joern_curves
+
+. save "`joern_curves'"
+file C:\Users\Rich\AppData\Local\Temp\ST_42f8_000070.tmp saved
+
+. 
+. *************************************
+. * JULY 7, POWERCURVES FOUND BY RICH
+. **************************************
+. import excel "$dropbox/Data/proprietary/powercurves/Power_curves_TWP_1603.xls", sheet("Power_curves") firstrow clear
+
+. renvars, lower
+
+. drop manid turbid conditions
+
+. rename (manufucturername turbinename) (turbinemanufacturer turbinemodel)
+
+. lower_names
+(687 real changes made)
+(0 real changes made)
+(605 real changes made)
+(0 real changes made)
+
+. * RENAME WIND Variables
+. forval y = 0 / 35 {
+  2.         if `y' != 35 local wind_names `wind_names' w`y' w`y'_5
+  3.         else local wind_names `wind_names' w`y'
+  4. }
+
+. rename (powerkwat-bw) (`wind_names')
+
+. 
+. drop if turbinemodel == "-"
+(1 observation deleted)
+
+. gen source = "TWP"
+
+. *Other powercurves only go up to 30
+. drop w30_5-w35
+
+. 
+. replace turbinemanufacturer = "neg micon" if turbinemanufacturer == "micon"
+(2 real changes made)
+
+. replace turbinemanufacturer = "aerodyn" if regexm(turbinemanufacturer, "aerodyn")
+(11 real changes made)
+
+. replace turbinemanufacturer = "ge" if turbinemanufacturer == "ge energy"
+(21 real changes made)
+
+. replace turbinemanufacturer = "fuhrlander" if turbinemanufacturer == "fuhrländer"
+(16 real changes made)
+
+. replace turbinemanufacturer = "senvion" if turbinemanufacturer == "repower"
+(8 real changes made)
+
+. ********************************************************************************
+. /*                                                      COMBINE THREE POWERCURVE SOURCES
+> 
+> HERE IS THE PRIORITY:
+>         - TWP
+>         - WEBSITE
+>         - JOERN
+>         
+> BY USING MERGE, AND STARTING WITH TWP I ENSURE THAT THAT PRIORITY IS PRESERVED
+> ********************************************************************************/
+. merge 1:1 turbinemanufacturer turbinemodel using "`powercurves'", nogen
+(note: variable turbinemodel was str24, now str55 to accommodate using data's values)
+(note: variable w0 was byte, now float to accommodate using data's values)
+(note: variable w2 was int, now double to accommodate using data's values)
+(note: variable w3 was int, now double to accommodate using data's values)
+(note: variable w4 was int, now double to accommodate using data's values)
+(note: variable w5 was int, now double to accommodate using data's values)
+(note: variable w6 was int, now double to accommodate using data's values)
+(note: variable w7 was int, now double to accommodate using data's values)
+(note: variable w8 was int, now double to accommodate using data's values)
+(note: variable w9 was int, now double to accommodate using data's values)
+(note: variable w10 was int, now double to accommodate using data's values)
+(note: variable w11 was int, now double to accommodate using data's values)
+(note: variable w12 was int, now double to accommodate using data's values)
+(note: variable w13 was int, now double to accommodate using data's values)
+(note: variable w14 was int, now double to accommodate using data's values)
+(note: variable w15 was int, now double to accommodate using data's values)
+(note: variable w16 was int, now double to accommodate using data's values)
+(note: variable w17 was int, now double to accommodate using data's values)
+(note: variable w18 was int, now double to accommodate using data's values)
+(note: variable w19 was int, now double to accommodate using data's values)
+(note: variable w20 was int, now double to accommodate using data's values)
+(note: variable w21 was int, now double to accommodate using data's values)
+(note: variable w22 was int, now double to accommodate using data's values)
+(note: variable w23 was int, now double to accommodate using data's values)
+(note: variable w24 was int, now double to accommodate using data's values)
+(note: variable w25 was int, now double to accommodate using data's values)
+(note: variable w26 was int, now double to accommodate using data's values)
+(note: variable w27 was int, now double to accommodate using data's values)
+(note: variable w28 was int, now double to accommodate using data's values)
+(note: variable w29 was int, now double to accommodate using data's values)
+(note: variable w30 was int, now double to accommodate using data's values)
+(note: variable source was str3, now str25 to accommodate using data's values)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                           923
+        from master                       693  
+        from using                        230  
+
+    matched                                 0  
+    -----------------------------------------
+
+. 
+. merge 1:1 turbinemanufacturer turbinemodel using "`joern_curves'", nogen
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                           905
+        from master                       791  
+        from using                        114  
+
+    matched                               132  
+    -----------------------------------------
+
+. 
+. ***************************************************
+. * STANDARDIZE AND DEAL WITH ADDITIONAL DUPLICATES
+. ***************************************************
+. foreach manu in alizeo liberty {
+  2.         replace turbinemodel = subinstr(turbinemodel, "`manu'", "", 1)
+  3. }
+(7 real changes made)
+(9 real changes made)
+
+. replace turbinemodel = trim(turbinemodel)
+(12 real changes made)
+
+. 
+. replace turbinemanufacturer = "awp" if turbinemanufacturer == "awp3.6(grid"
+(1 real change made)
+
+. replace turbinemanufacturer = "future_energy" if inlist(turbinemanufacturer, "future", "futurenergy")
+(4 real changes made)
+
+. replace turbinemanufacturer = "northern power systems" if turbinemanufacturer == "northern"
+(2 real changes made)
+
+. 
+. replace turbinemanufacturer = "windenergy lebanon" if turbinemanufacturer == "windenergylebanon"
+(5 real changes made)
+
+. 
+. replace turbinemanufacturer = "northern power systems" if turbinemanufacturer == "northern power"
+(2 real changes made)
+
+. 
+. * MODEL NAMES
+. replace turbinemodel = "b82" if turbinemodel == "82.4m 2.3mw"
+(1 real change made)
+
+. 
+. *Mitsubishi
+. replace turbinemodel = "mwt-62-1000" if regexm(turbinemodel, "mwt62") & turbinemanufacturer == "mitsubishi"
+(1 real change made)
+
+. replace turbinemodel = "mwt-92-2.4" if regexm(turbinemodel, "mwt92-2.4") & turbinemanufacturer == "mitsubishi"
+(1 real change made)
+
+. replace turbinemodel = "mwt-95-2.4" if regexm(turbinemodel, "mwt95-2.4") & turbinemanufacturer == "mitsubishi"
+(1 real change made)
+
+. replace turbinemodel = "mwt-1000" if regexm(turbinemodel, "mwt-1000 ") & turbinemanufacturer == "mitsubishi"
+(1 real change made)
+
+. replace turbinemodel = "mwt-1000a" if regexm(turbinemodel, "mwt-1000a") & turbinemanufacturer == "mitsubishi"
+(1 real change made)
+
+. 
+. rename turbinemodel powercurve_turbinemodel
+
+. 
+. * CREATE CAPACITY AS MAX VALUE FROM WIND
+. egen powercurve_max_cap = rowmax(w*)
+
+. 
+. ren (w0-w30) ///
+>     (w0 w1 w2 w3 w4 w5 w6 w7 w8 w9 w10 w11 w12 w13 w14 w15 w16 w17 w18 w19 w20 w21 ///
+>      w22 w23 w24 w25 w26 w27 w28 w29 w30 w31 w32 w33 w34 w35 w36 w37 w38 w39 ///
+>          w40 w41 w42 w43 w44 w45 w46 w47 w48 w49 w50 w51 w52 w53 w54 w55 w56 w57 ///
+>          w58 w59 w60)
+
+. 
+. label var powercurve_max_cap "Capacity(kW) calculated by us as max value in power curve data"
+
+. order turbinemanufacturer powercurve_turbinemodel powercurve_max_cap w*
+
+. sort turbinemanufacturer powercurve_turbinemodel
+
+. save "$generated_data/power_curve.dta", replace
+file D:/Dropbox/projects/joe_aldy/1603/generated_data/power_curve.dta saved
+
+. ********************************************************************************
+. tempsetup
+D:\GitDir\Projects\ags_capital_vs_output\temp
+
+. capture log close

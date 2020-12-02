@@ -1,0 +1,436 @@
+----------------------------------------------------------------------------------------------------------------------------------------
+      name:  <unnamed>
+       log:  D:\GitDir\Projects\ags_capital_vs_output/output/logs/rec_prep.txt
+  log type:  text
+ opened on:  20 Mar 2019, 19:31:04
+
+. ********************************************************************************
+. ********************************************************************************
+. 
+. **************************
+. * BRING IN AND CLEAN RECS
+. **************************
+. import excel using "$dropbox/Data/proprietary/recs_prices/Market Data Price Report.xlsx", clear first case(lower)
+
+. qui {
+
+. 
+. 
+. * Command that brings in state abbreviations and fips codes given state fullnames
+. statastates, name(state)
+(164,095 real changes made)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                        55,179
+        from master                    55,143  (_merge==1)
+        from using                         36  (_merge==2)
+
+    matched                           164,095  (_merge==3)
+    -----------------------------------------
+
+. replace state= proper(state)
+(164,131 real changes made)
+
+. drop if _merge == 2
+(36 observations deleted)
+
+. drop _merge
+
+. rename state_fips stfips
+
+. 
+. /*  Create Indicator for whether a REC is applicable to wind farm projects
+> coming online - state by state */
+. gen wind_rec = 0
+
+. label var wind_rec "REC price is applicable to new wind farms"
+
+. 
+. *CA
+. replace wind_rec = 1 if instrumentname == "California Wind REC" & state_abbrev == "CA"
+(12 real changes made)
+
+. 
+. *CT - Class I appplies to wind
+. replace wind_rec = 1 if recclass == "Class I" & state_abbrev == "CT"
+(7,191 real changes made)
+
+. 
+. *DE - FLAG DSIRE page indicates DE applies to all wind
+. replace wind_rec = 1 if inlist(instrumentname, "Delaware Existing REC", "Delaware New REC")
+(5,664 real changes made)
+
+. 
+. *DC - TIER I applies to wind
+. replace wind_rec = 1 if state_abbrev == "DC" & recclass == "Tier I"
+(4,067 real changes made)
+
+. 
+. 
+. /*IL - COME BACK TO THIS
+> Source for MRETS: http://www.mrets.org/resources/statutes/
+> Source for PJM: https://www.pjm-eis.com/program-information/illinois.aspx
+> */
+. replace wind_rec = 1 if state_abbrev == "IL" & ///
+> inlist(instrumentname, "Illinois MRETS Registered Wind","Illinois PJM-GATS Wind", "Illinois Wind")
+(5,332 real changes made)
+
+. 
+. /* ME - Confusing because on the website it ays "Class I" is composed of new reneables that have
+> come on-line after Sept 1, 2005. Going to assume this means new REC */
+. replace wind_rec = 1 if state_abbrev == "ME" & instrumentname == "Maine New REC" 
+(4,057 real changes made)
+
+. 
+. *MD - TIER I applies to wind
+. replace wind_rec = 1 if state_abbrev == "MD" & recclass == "Tier I"
+(6,415 real changes made)
+
+. 
+. * MA - Class I includes Wind. Class II only applies to wind operating before Jan 1, 1998
+. replace wind_rec = 1 if state_abbrev == "MA" & recclass == "Class I"
+(5,345 real changes made)
+
+. 
+. *MI - only one instrumenttype in Michigan and it applies to wind
+. replace wind_rec = 1 if state_abbrev == "MI"
+(1,871 real changes made)
+
+. 
+. *NH - Class I includes wind energy that began operation after Jan 1, 2006
+. replace wind_rec = 1 if state_abbrev == "NH" & recclass == "Class I"
+(3,694 real changes made)
+
+.  
+. *NJ- wind applies to class I. FLAG: SAYS CLASS II applies to
+. *"offshore wind" - wind located in ATlantic Ocane and connected to NJ electric transmission system
+. replace wind_rec = 1 if state_abbrev == "NJ" & recclass == "Class I"
+(6,884 real changes made)
+
+. 
+. *OH - seems like all non-solar apply to wind except I cannot find anything for Ohio Compliance Non-Solar
+. replace wind_rec = 1 if state_abbrev == "OH" & ///
+> inlist(instrumentname, "Ohio Adjacent-State Non-Solar", "Ohio In-State Non-Solar")
+(5,081 real changes made)
+
+. 
+. *PA - wind only in Tier I
+. replace wind_rec = 1 if state_abbrev == "PA" & recclass == "Tier I"
+(4,539 real changes made)
+
+. 
+. *RI - Has "New" and "Existing" Rec. Looks like Wind applies to all
+. replace wind_rec = 1 if state_abbrev == "RI"
+(7,110 real changes made)
+
+. 
+. *TX - qualifying systems are those installed after 9/1999
+. replace wind_rec = 1 if state_abbrev == "TX"
+(7,058 real changes made)
+
+. 
+. gen year = year(date)
+
+. gen month = month(date)
+
+. 
+. * Prepare to merge with RPS data
+. drop if state == ""
+(55,143 observations deleted)
+
+. keep instrumentname state_abbrev wind_rec year bid offer date month
+
+. order state year date instrumentname
+
+. 
+. *Take average of bid and offer
+. gen rec_price = (bid + offer) / 2
+
+. drop bid offer
+
+. 
+. 
+. /* We want one price per state-month. 
+>    If a state-month has RECS that apply to wind. Take average
+>    of only those. 
+>    Otherwise if there is no wind recs just take average of any REC
+> */
+. rename state_abbrev state
+
+. 
+. *Number of wind_recs in that STATE_year_month
+. bys state year month: egen wind_rec_count = total(wind_rec == 1)
+
+. 
+. *Make sure you don't lose any state-year-months
+. qui unique state year month
+
+. local before =`r(unique)'
+
+. 
+. * If there is a wind_REC in a state-year-month, can drop non_wind rec. Those don't matter
+. drop if wind_rec != 1 & wind_rec_count > 0
+(84,566 observations deleted)
+
+. qui unique state year month
+
+. assert `r(unique)' == `before' //make sure you do not lose any state-month-year
+
+. 
+. /* Now take an average of what's remaining
+>    If a state month year has a wind rec month will only be taking averages of wind RECs
+>    If there are no wind, it's just an average of all RECs
+> */
+. collapse (mean) rec_price, by(state year month)
+
+. 
+. sort state year month
+
+. 
+. tempfile rec_state_year_month
+
+. save "`rec_state_year_month'"
+file C:\Users\Rich\AppData\Local\Temp\ST_44f8_000001.tmp saved
+
+. 
+. **************************************************************
+. * BRING IN EIA RETAIL SALES OF ELECTRICITY - ONLY KEEP TOTAL
+. **************************************************************
+. import excel "$dropbox\Data\public\eia\eia_861\sales_annual.xlsx", cellrange(A2:I3082) firstrow clear
+
+. renvars, lower
+
+. keep year state industrysectorcategory total
+
+. keep if industry == "Total Electric Industry"
+(1,728 observations deleted)
+
+. drop industry
+
+. sort state year
+
+. rename total total_retail_sales
+
+. order state year total
+
+. drop if state == "US"
+(26 observations deleted)
+
+. tempfile eia_annual_sales
+
+. keep if year >= 1999
+(459 observations deleted)
+
+. save "`eia_annual_sales'"
+file C:\Users\Rich\AppData\Local\Temp\ST_44f8_000002.tmp saved
+
+. 
+. 
+. *********************
+. * PROCESS RPS
+. *********************
+. import excel "$dropbox\Data\public\LBL\RPS_Compliance_Data.xlsx", cellrange(A35:AK152) firstrow clear
+
+. renvars, lower
+
+. drop notes datasources
+
+. drop rpsachievement-ak
+
+. 
+. /* Renaming RPS obligations variables to obli_1999, oblig_2000, etc)
+>    Use MACRO to create the list of newnames  */
+. local new_names
+
+. forval year = 1999/2014 {
+  2.         local new_names `new_names' oblig`year'
+  3. }
+
+. rename (rpsobligations-t) (`new_names')
+
+. drop if totalrpsortier == "" //drop first row
+(37 observations deleted)
+
+. 
+. * Replace "-" with "0" to enable destring
+. foreach var in `new_names' {
+  2.         replace `var' = "0" if `var' == "-"
+  3. }
+(79 real changes made)
+(76 real changes made)
+(71 real changes made)
+(69 real changes made)
+(65 real changes made)
+(60 real changes made)
+(59 real changes made)
+(49 real changes made)
+(37 real changes made)
+(29 real changes made)
+(24 real changes made)
+(19 real changes made)
+(11 real changes made)
+(8 real changes made)
+(7 real changes made)
+(5 real changes made)
+
+. replace oblig2014 = "0" if oblig2014 == "no data"
+(1 real change made)
+
+. destring `new_names', replace
+oblig1999: all characters numeric; replaced as long
+oblig2000: all characters numeric; replaced as double
+oblig2001: all characters numeric; replaced as double
+oblig2002: all characters numeric; replaced as double
+oblig2003: all characters numeric; replaced as double
+oblig2004: all characters numeric; replaced as double
+oblig2005: all characters numeric; replaced as double
+oblig2006: all characters numeric; replaced as double
+oblig2007: all characters numeric; replaced as double
+oblig2008: all characters numeric; replaced as double
+oblig2009: all characters numeric; replaced as double
+oblig2010: all characters numeric; replaced as double
+oblig2011: all characters numeric; replaced as double
+oblig2012: all characters numeric; replaced as double
+oblig2013: all characters numeric; replaced as double
+oblig2014: all characters numeric; replaced as double
+
+. 
+. rename (rpsstates totalrpsortier) (state tier)
+
+. 
+. *States take up multiple rows in the excel sheet
+. carryforward state, replace
+state:  (49 real changes made)
+
+. 
+. *Bring Obligations into Long Format
+. reshape long oblig, i(state tier) j(year)
+(note: j = 1999 2000 2001 2002 2003 2004 2005 2006 2007 2008 2009 2010 2011 2012 2013 2014)
+
+Data                               wide   ->   long
+-----------------------------------------------------------------------------
+Number of obs.                       80   ->    1280
+Number of variables                  18   ->       4
+j variable (16 values)                    ->   year
+xij variables:
+      oblig1999 oblig2000 ... oblig2014   ->   oblig
+-----------------------------------------------------------------------------
+
+. replace tier = trim(tier)
+(784 real changes made)
+
+. 
+. /* Foreach state-year, summ all applicable carVe-outs that we don't want to include in our
+>    obligation. This code will summ only those that fit the regexms below
+> */
+. bys state year: egen carve = total(oblig * ((regexm(tier, "DG Carve-Out") | regexm(tier, "Solar") | ////
+>                                    regexm(tier, "Poultry Waste") | regexm(tier, "Swine Waste")) & !regexm(tier, "Non-Solar")))
+
+. 
+. * NOW RPS_OBLIGATION = TOTAL OBLIGATIONS - CARVE_OUTS
+. keep if tier == "Total RPS"
+(784 observations deleted)
+
+. drop tier
+
+. 
+. gen actual_rps = oblig - carve
+
+. drop oblig carve
+
+. 
+. * Using 2014 obligation for 2015
+. preserve
+
+.         keep if year == 2014
+(465 observations deleted)
+
+.         replace year = 2015
+(31 real changes made)
+
+.         tempfile data_2015
+
+.         save "`data_2015'"
+file C:\Users\Rich\AppData\Local\Temp\ST_44f8_000004.tmp saved
+
+. restore
+
+. 
+. * Bring in 2015 data
+. append using "`data_2015'"
+
+. 
+. * BRING IN ANNUAL SALES AND CALCULATE RPS OBLIGATION / TOTAL SALES
+. merge 1:1 state year using "`eia_annual_sales'"
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                           340
+        from master                         0  (_merge==1)
+        from using                        340  (_merge==2)
+
+    matched                               527  (_merge==3)
+    -----------------------------------------
+
+. 
+. gen state_rps_level = (actual_rps / total_retail_sales) * 100
+(340 missing values generated)
+
+. 
+. *Set obligation to 0 if state not listed in RPS dataset
+. replace state_rps_level = 0 if _merge == 2
+(340 real changes made)
+
+. 
+. drop actual_rps total_retail_sales _merge
+
+. 
+. * EXPAND INTO 12 MONTHS FOR EACH STATE-YEAR
+. expand 12
+(9,537 observations created)
+
+. sort state year
+
+. bys state year: gen month = _n
+
+. 
+. * BRING IN REC PRICES
+. merge 1:1 state year month using "`rec_state_year_month'"
+(note: variable year was int, now float to accommodate using data's values)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                         9,227
+        from master                     9,227  (_merge==1)
+        from using                          0  (_merge==2)
+
+    matched                             1,177  (_merge==3)
+    -----------------------------------------
+
+. assert _merge != 2
+
+. drop _merge
+
+. 
+. label var state_rps_level " State RPS level (% of retail sales, annual)"
+
+. 
+. order state year month
+
+. sort state year month
+
+. compress
+  variable year was float now int
+  variable month was float now byte
+  (52,020 bytes saved)
+
+. save "$generated_data/state_year_month_rps_rec.dta", replace
+(note: file D:/Dropbox/projects/joe_aldy/1603/generated_data/state_year_month_rps_rec.dta not found)
+file D:/Dropbox/projects/joe_aldy/1603/generated_data/state_year_month_rps_rec.dta saved
+
+. ********************************************************************************
+. tempsetup
+D:\GitDir\Projects\ags_capital_vs_output\temp
+
+. capture log close

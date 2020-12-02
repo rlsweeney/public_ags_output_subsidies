@@ -1,0 +1,753 @@
+-------------------------------------------------------------------------------------------------------------------------------------------
+      name:  <unnamed>
+       log:  D:\GitDir\Projects\ags_capital_vs_output/output/logs/turbine_powercurve_matching.txt
+  log type:  text
+ opened on:  20 Mar 2019, 21:46:52
+
+. ********************************************************************************
+. use "$generated_data/eia_static.dta", clear
+
+. keep facilityid manufacturer_eia model_eia
+
+. 
+. * Merge in AWEA turbine information
+. merge 1:1 facilityid using "$generated_data/awea.dta", nogen keep(master matched) keepusing(awea_manufacturer awea_model)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                            30
+        from master                        30  
+        from using                          0  
+
+    matched                               929  
+    -----------------------------------------
+
+. 
+. rename (manufacturer_eia model_eia) (turbinemanufacturer turbinemodel)
+
+. 
+. * USE AWEA INFORMATION TO FILL IN EIA FACILITIES WITH MISSING TURBINE INFO
+. replace awea_manufacturer = subinstr(awea_manufacturer, "refurbished", "", 1)
+(3 real changes made)
+
+. 
+. replace turbinemanufacturer = awea_manufacturer if turbinemanufacturer == ""
+(11 real changes made)
+
+. replace turbinemodel        = awea_model        if turbinemodel == ""
+(11 real changes made)
+
+. 
+. * Fixing Vague EIA model if AWEA has specific model
+. replace turbinemodel = awea_model if inlist(turbinemodel, "mwt-1000", "1000a", "mwt 1000a", "mwt-1000a") & awea_model == "mwt62/1.0"
+(13 real changes made)
+
+. replace turbinemodel = awea_model if awea_model == "mwt62/1.0" & inlist(turbinemodel, "mitsubishi mwt-1000a", "mhi 1000-a")
+(1 real change made)
+
+. replace turbinemodel = awea_model if awea_model == "mwt62/1.0" & turbinemodel == "mitsubishi mwt-1000a 1.0 mw"
+(0 real changes made)
+
+. replace turbinemodel = awea_model if awea_model == "1.6-82.5" & turbinemodel == "1.68" & turbinemanufacturer == "ge"
+(2 real changes made)
+
+. 
+. drop awea*
+
+. replace turbinemanufacturer = trim(turbinemanufacturer)
+(2 real changes made)
+
+. 
+. * STANDARDIZE MANUFACTURERS
+. replace turbinemodel = ""        if turbinemodel == "unknown"
+(1 real change made)
+
+. replace turbinemanufacturer = "ge" if turbinemanufacturer == "ge energy"
+(2 real changes made)
+
+. replace turbinemanufacturer = "neg micon" if inlist(turbinemanufacturer, "micon")
+(1 real change made)
+
+. 
+. * STANDARDIZE MODELS - ELIMINATE DUPLICATES MODELS IN THE DATA
+. 
+. * Get rid of Manufacturer names in model names
+. foreach model in enertech micon liberty mitsubishi nedwind suzlon vensys vestas zond {
+  2.         replace turbinemodel = subinstr(turbinemodel, "`model'", "", .)
+  3. }
+(0 real changes made)
+(1 real change made)
+(0 real changes made)
+(0 real changes made)
+(2 real changes made)
+(4 real changes made)
+(0 real changes made)
+(0 real changes made)
+(0 real changes made)
+
+. replace turbinemodel = ltrim(turbinemodel)
+(7 real changes made)
+
+. 
+. *ZOND
+. replace turbinemodel = "z750" if inlist(turbinemodel, "750", "0.75") & turbinemanufacturer == "zond"
+(5 real changes made)
+
+. 
+. * Unison
+. replace turbinemodel = "u57" if turbinemodel == "u-57" & turbinemanufacturer == "unison"
+(1 real change made)
+
+. 
+. * Vestas
+. replace turbinemodel = subinstr(turbinemodel, "-", "", 1) if turbinemanufacturer == "vestas" & ///
+> inlist(turbinemodel, "v-100", "v-15", "v-17", "v-27", "v-47", "v-80", "v-90", "v-82")
+(3 real changes made)
+
+. 
+. replace turbinemodel = "v47-660" if regexm(turbinemodel, "v47") & turbinemanufacturer == "vestas"
+(3 real changes made)
+
+. 
+. replace turbinemodel = "v82-1.65" if turbinemanufacturer == "vestas" & regexm(turbinemodel, "v82") & regexm(turbinemodel, "1.65")
+(3 real changes made)
+
+. replace turbinemodel = "v82-1.65" if turbinemodel == "v82-1650"
+(1 real change made)
+
+. 
+. replace turbinemodel = "v90-1.8" if turbinemodel == "v90 mk 8"
+(1 real change made)
+
+. 
+. replace turbinemodel = "v100-1.8" if inlist(turbinemodel, "v100 1.8", "v100 1.8 vcss")
+(5 real changes made)
+
+. replace turbinemodel = "v80-1.8" if turbinemodel == "1.8 mw v-80 mkiii"
+(1 real change made)
+
+. 
+. replace turbinemodel = "v90-3.0" if turbinemanufacturer == "vestas" & ///
+> inlist(turbinemodel, ", v90/3mw", "v90 3.0 mw and 1.8 mw", "v90 3mw mk8", "v90 3mw", "v90 3.0")
+(5 real changes made)
+
+. 
+. replace turbinemodel = "v82" if turbinemodel == "vmn82"
+(0 real changes made)
+
+. replace turbinemodel = "v112-3.0" if turbinemodel == "v112 3.0"
+(1 real change made)
+
+. replace turbinemodel = "v72" if turbinemodel == "72" & turbinemanufacturer == "vestas"
+(1 real change made)
+
+. replace turbinemodel = "v17-90" if regexm(turbinemodel, "v17") & turbinemanufacturer == "vestas"
+(4 real changes made)
+
+. 
+. *Vensys
+. replace turbinemodel = "v77" if turbinemanufacturer == "vensys" & turbinemodel == "77"
+(3 real changes made)
+
+. replace turbinemodel = "v82" if turbinemanufacturer == "vensys" & turbinemodel == "82"
+(2 real changes made)
+
+. 
+. 
+. *Senvion. According to website only one mm92
+. replace turbinemodel = "mm92" if turbinemanufacturer == "senvion" & regexm(turbinemodel, "mm92")
+(6 real changes made)
+
+. replace turbinemodel = "mm92" if turbinemodel == "mm 92"
+(2 real changes made)
+
+. 
+. *Suzlon
+. replace turbinemodel = "s88-2100" if (regexm(turbinemodel, "s-88") | regexm(turbinemodel, "s88")) & regexm(turbinemodel, "2.1")
+(11 real changes made)
+
+. *No 905 for s64 so typo
+. replace turbinemodel = "s64-950" if inlist(turbinemodel, "s64 905kw", "s64 950 kw", "s64/950", "s64 950kw")
+(10 real changes made)
+
+. replace turbinemodel = "s64-1250" if turbinemodel == "s64 1.25mw"
+(1 real change made)
+
+. replace turbinemodel = "s95-2100" if turbinemodel == "s95" //only one s95
+(1 real change made)
+
+. 
+. *Siemens
+. replace turbinemodel = "swt-2.3-101" if turbinemanufacturer == "siemens" & ///
+> regexm(turbinemodel, "2.3") & regexm(turbinemodel, "101")
+(11 real changes made)
+
+. 
+. replace turbinemodel = "swt-2.3-93" if turbinemanufacturer == "siemens" & ///
+> regexm(turbinemodel, "2.3") & regexm(turbinemodel, "93")
+(7 real changes made)
+
+. 
+. replace turbinemodel = "swt-2.3-108" if turbinemanufacturer == "siemens" & ///
+> inlist(turbinemodel, "2-3-108", "2.3-108")
+(3 real changes made)
+
+. 
+. replace turbinemodel = "swt-3.0-101" if turbinemodel == "swt101.3" | turbinemodel == "swt 3.0-101"
+(2 real changes made)
+
+. 
+. replace turbinemodel = "swt-2.3-108" if turbinemodel == "swt 2.37-108"
+(1 real change made)
+
+. 
+. *Nordex
+. replace turbinemodel = "n54/1000" if inlist(turbinemodel, "n-54", "1 mw", "1000","n1000", "n54/1000") & turbinemanufacturer == "nordex"
+(1 real change made)
+
+. replace turbinemodel = "n100/2500" if inlist(turbinemodel, "n100")
+(0 real changes made)
+
+. replace turbinemodel = "n60/1300" if inlist(turbinemodel, "n-60", "n-60 1.3")
+(1 real change made)
+
+. 
+. * Nordtank
+. replace turbinemodel = "ntk 65/13" if turbinemodel == "nkt 65"
+(1 real change made)
+
+. 
+. *NEG MICON
+. replace turbinemodel = "nm52/900" if inlist(turbinemodel, "micon 900", "nm900-52", "nm52")
+(1 real change made)
+
+. replace turbinemodel = "nm54/950" if turbinemodel == "nm54-950"
+(1 real change made)
+
+. replace turbinemodel = "nm48/750" if inlist(turbinemodel, "mn48-750")
+(1 real change made)
+
+. replace turbinemodel = "nm72/1500" if turbinemodel == "nm72-1.5"
+(1 real change made)
+
+. 
+. 
+. *Mitsubishi
+. replace turbinemodel = "mwt-1000a" if turbinemanufacturer == "mitsubishi" & regexm(turbinemodel, "1000a")
+(2 real changes made)
+
+. replace turbinemodel = "mwt-1000a" if turbinemodel == "mhi 1000-a" | turbinemodel == "1000 a"
+(1 real change made)
+
+. replace turbinemodel = "mwt-95/2.4" if regexm(turbinemodel, "mwt95") | regexm(turbinemodel, "mwt-95")
+(2 real changes made)
+
+. replace turbinemodel = "mwt-95/2.4" if turbinemodel == "mwt-2.4 95"
+(1 real change made)
+
+. replace turbinemodel = "mwt-62/1.0" if turbinemodel == "mwt62/1.0"
+(15 real changes made)
+
+. replace turbinemodel = "mwt-62/1.0" if inlist(turbinemodel, "mwt 62/1.0")
+(1 real change made)
+
+. replace turbinemodel = "mwt-102/2.4" if turbinemodel == "mwt102"
+(1 real change made)
+
+. replace turbinemodel = "mwt-600-45" if turbinemodel == "mwt-600 (45m)"
+(3 real changes made)
+
+. 
+. *Goldwind
+. replace turbinemodel = "gw82/1500" if turbinemanufacturer == "goldwind" & regexm(turbinemodel, "82") & regexm(turbinemodel, "1500") 
+(4 real changes made)
+
+. replace turbinemodel = "gw82/1500" if inlist(turbinemodel, "gw82-1.5 mw", "gw82")
+(2 real changes made)
+
+. replace turbinemodel = "gw87/1500" if inlist(turbinemodel, "gw 87/1500", "gw87-1.5", "gw 87/1500")
+(4 real changes made)
+
+. replace turbinemodel = "gw100-2.5" if turbinemodel == "gw2.5pmdd100"
+(1 real change made)
+
+. replace turbinemodel = "gw77/1500" if turbinemodel == "gw 77/1500"
+(1 real change made)
+
+. 
+. * GE - MOST MODELS
+. replace turbinemodel = "1.6-100" if inlist(turbinemodel, "1.6 100/100", "1.6-100 wtg")
+(2 real changes made)
+
+. replace turbinemodel = "2.5 xl" if turbinemodel == "2.5xl+"
+(3 real changes made)
+
+. replace turbinemodel = "1.6-82.5" if inlist(turbinemodel, "1.6 82.5", "1.6mw 82.5")
+(3 real changes made)
+
+. replace turbinemodel = "1.6 ess" if inlist(turbinemodel, "1.6es", "1.6ess")
+(0 real changes made)
+
+. replace turbinemodel = "1.5 ess" if turbinemodel == "1.5 mw ess"
+(1 real change made)
+
+. replace turbinemodel = "1.5 se" if turbinemodel == "1.5se"
+(1 real change made)
+
+. 
+. * Looked up on GE 1.5-82.5 -> 1.5 xle, GE 1.6-82.5 -> 1.6 xle
+. replace turbinemodel = "1.5 xle" if turbinemodel == "1.5-82.5"
+(1 real change made)
+
+. replace turbinemodel = "1.6 xle" if inlist(turbinemodel, "1.6 82.5", "1.6mw 82.5", "1.6-82.5")
+(16 real changes made)
+
+. 
+. * GAMESA
+. replace turbinemodel = "g52-850" if inlist(turbinemodel, "g52-0.8", "g5x-850kw")
+(1 real change made)
+
+. replace turbinemodel = "g90-2.0" if inlist(turbinemodel, "g90-2.0mw", "g90-2mw")
+(3 real changes made)
+
+. replace turbinemodel = "g97-2.0" if inlist(turbinemodel, "g97-2.0 mw", "g97")
+(1 real change made)
+
+. replace turbinemodel = "g87-2.0" if turbinemodel == "v87" & turbinemanufacturer == "gamesa"
+(1 real change made)
+
+. replace turbinemodel = "g80-2.0" if turbinemodel == "g80"
+(1 real change made)
+
+. 
+. * FUHRLANDER
+. replace turbinemodel = "fl 1500/77" if inlist(turbinemodel, "1500/77", "fl1577")
+(2 real changes made)
+
+. 
+. * EWT
+. replace turbinemodel = "dw54-900" if inlist(turbinemodel, "dw54", "awe54-900")
+(1 real change made)
+
+. 
+. * CLIPPER
+. local clipper turbinemanufacturer == "clipper"
+
+. replace turbinemodel = "c93" if regexm(turbinemodel, "93") & `clipper'
+(1 real change made)
+
+. replace turbinemodel = "c96" if regexm(turbinemodel, "96") & `clipper'
+(6 real changes made)
+
+. 
+. *BONUS
+. replace turbinemodel = "b65/13" if turbinemanufacturer == "bonus" & inlist(turbinemodel,"65/13", "65")
+(2 real changes made)
+
+. 
+. * ACCIONA
+. replace turbinemodel = "aw77-1500" if regexm(turbinemodel, "aw77/1500") | regexm(turbinemodel, "aw 77/1500")
+(5 real changes made)
+
+. replace turbinemodel = "aw125-3000" if turbinemodel == "aw125/3000"
+(1 real change made)
+
+. replace turbinemodel = "aw82-1500" if regexm(turbinemodel, "aw82")
+(2 real changes made)
+
+. replace turbinemodel = "1.6-100" if turbinemodel == "1.6100ess" 
+(0 real changes made)
+
+. 
+. save "$generated_data/standardized_turbine_list.dta", replace
+file D:/Dropbox/projects/joe_aldy/1603/generated_data/standardized_turbine_list.dta saved
+
+. 
+. * CREATE STRING CROSS-WALK BETWEEN POWER CURVES AND OUR MODELS AND MANUFACTURERS
+. drop facilityid
+
+. duplicates drop
+
+Duplicates in terms of all variables
+
+(818 observations deleted)
+
+. 
+. * CREATE ALL PAIR-WISE COMBINATIONS BY MANUFACTURER
+. joinby turbinemanufacturer using "$generated_data/power_curve.dta", unmatched(master)  _merge(pow)
+
+. keep turbinemanufacturer turbinemodel powercurve_turbinemodel source
+
+. duplicates drop
+
+Duplicates in terms of all variables
+
+(0 observations are duplicates)
+
+. order turbinemanufacturer turbinemodel powercurve_turbinemodel source
+
+. /***************************************************************************************************
+>                                                                        README 
+> 
+> The data-set above was manually examined and perfect matches between turbines in AWEA and EIA
+> and the powercurves datset were kept.
+> 
+> * IF THE POWERCURVES DATA OR THE EIA/AWEA DATA IS UPDATED THAT SHOULDN'T CHANGE THE DATA-SET
+>   BELOW. 
+>   
+>   The PERFECT MATCHES CAN BE USED AS A FILTER SO THAT IMPERFECT/NON-MATCHES CAN BE IMPROVED
+>   WITH NEW DATA
+>   
+>   nm 72, iec i
+> ****************************************************************************************************/
+. 
+. * DATASET OF PERFECT MATCHES BETWEEN THE DATASETS
+. preserve
+
+.         clear
+
+.         input str50 turbinemanufacturer      str50 turbinemodel    str50 powercurve_turbinemodel
+
+                                    turbinemanufacturer                                        turbinemodel                             pow
+> ercurve_turbinemodel
+  1.                         "ewt"                 "dw54-900"              "directwind 900/54"                                       
+  2.                         "ge"                  "1.5 xle"           "1.5xle"                                      
+  3.                         "vestas"                  "v47-660"               "v47/660"                                     
+  4.                         "ge"                  "1.5 sle"           "1.5sle"                                      
+  5.                         "suzlon"                  "s64-1250"          "s64/1250"                                        
+  6.                         "dewind"                  "d8.2"                  "d8.2"                                                      
+>           
+  7.                         "fuhrlander"          "fl 1500/77"            "fl 1500/77"                                      
+  8.                         "vestas"                  "v90-1.8"               "v90/1800"                                    
+  9.                         "neg micon"               "nm48/750"          "nm48/750"                                        
+ 10.                         "nordex"                  "n60/1300"          "n60/1300"                                        
+ 11.                         "ge"                  "1.5 s"             "1.5s"                                        
+ 12.                         "vestas"                  "v42-600"               "v42/600"                                                   
+>                   
+ 13.                         "clipper"                 "c93"               "c93"                                     
+ 14.                         "ge"                  "1.5-77"            "1.5sle"                                      
+ 15.                         "vestas"                  "v44-600"               "v44/600"                                     
+ 16.                         "mitsubishi"          "mwt-1000"              "mwt-1000"                                        
+ 17.                         "neg micon"               "nm52/900"          "nm52/900"                                        
+ 18.                         "neg micon"               "nm72c/1500"        "nm72c/1500"
+ 19.                         "neg micon"           "nm72/1500"         "nm 72, iec i"
+ 20.                         "vestas"                   "v80-1.8"          "v80/1800"                                        
+ 21.                         "vestas"                   "v82-1.65"         "v82/1650"                                        
+ 22.                         "mitsubishi"           "mwt-1000a"            "mwt-1000a"                               
+ 23.                         "gamesa"                   "g52-850"          "g52/850"                                 
+ 24.                         "suzlon"                   "s64-950"          "s64/950"                                                       
+>   
+ 25.                         "vestas"                   "v90-3.0"          "v90/3000"                                        
+ 26.                         "gamesa"                   "g87-2.0"          "g87/2000"                                        
+ 27.                         "neg micon"                "nm82/1650"        "nm82/1650"                                                     
+>   
+ 28.                         "siemens"                  "swt-2.3-93"       "swt-2.3-93"                                      
+ 29.                         "suzlon"                   "s88-2100"         "s88/2100"                                                      
+>   
+ 30.                         "clipper"                  "c96"                  "c96"                                 
+ 31.                         "vestas"                   "v100-1.8"         "v100/1800"                                       
+ 32.                         "mitsubishi"            "mwt-95/2.4"      "mwt-95-2.4"                          
+ 33.                         "gamesa"                    "g90-2.0"         "g90/2000"                                        
+ 34.                         "senvion"                   "mm92"                "mm92"                                
+ 35.                         "acciona"                   "aw77-1500"        "aw 77-1500 class ii"                                    
+ 36.                         "siemens"                   "swt-2.3-82"          "swt-2.3-82"                                                
+>           
+ 37.                         "mitsubishi"            "mwt-62/1.0"      "mwt-62-1000"                         
+ 38.                         "mitsubishi"            "mwt-92/2.4"      "mwt-92-2.4"                                  
+ 39.                         "acciona"                   "aw82-1500"       "aw 82-1500 class iiib"                                   
+ 40.                         "vestas"                    "v112-3.0"        "v112/3000"                                       
+ 41.                         "siemens"                   "swt-2.3-101"         "swt-2.3-101"                                 
+ 42.                         "clipper"                   "c89"                 "c89"                                 
+ 43.                         "gamesa"                    "g97-2.0"         "g97/2000"                                        
+ 44.                         "aaer"                  "a-1500-70"           "a-1500-70 70m 1500kw"                                    
+ 45.                         "goldwind"                  "gw77/1500"        "gw77/1500"                                                    
+>                   
+ 46.                         "nordex"                    "n100/2500"       "n100/2500"                                                     
+>                   
+ 47.                         "sany"                  "se8720iiie"      "se8720iii"                                   
+ 48.                         "dewind"                    "d9.2"                "d9.2"                                        
+ 49.                         "ge"                    "2.5 xl"              "2.5xl"                                   
+ 50.                         "unison"                    "u57"                 "u57"                                 
+ 51.                         "mitsubishi"            "mwt-102/2.4"     "mwt-102-2.4"                                 
+ 52.                         "goldwind"                  "gw82/1500"       "gw82/1500"                                       
+ 53.                         "sinovel"                   "sl1500/82"       "sl 1500/82"                                                    
+>           
+ 54.                         "vensys"                    "v82"                 "82"                                  
+ 55.                         "guodian"                   "gup1500-82"          "up82"                                        
+ 56.                         "sany"                  "se9320iii-3"     "se9320iii-3"                                 
+ 57.                         "leitwind"                  "ltw-77"          "ltw77-1500"                                      
+ 58.             "gamesa"                "g80-2.0"         "g80/2000"
+ 59.                         "vensys"                    "v77"                 "77"  
+ 60.                         "neg micon"             "nm54/950"        "nm54/950"
+ 61.                         "nordex"                                "n90/2500"                "n90/2500"    
+ 62.                         "vestas"                "v90-2.0"         "v90/2000"
+ 63.                         "vestas"                "v27-225"         "v27/225"
+ 64.                         "danwin"                "23/160"          "23/160"
+ 65.                         "ge"                                    "1.5 se"                  "1.5se"       
+ 66.                         "ge"                    "1.6-100"         "1.6-100"
+ 67.                         "ge"                    "1.6 xle"         "1.6-82.5"
+ 68.                         "ge"                    "1.7-100"         "1.7-100"
+ 69.                         "ge"                    "1.85-82.5"       "1.85-82.5"
+ 70.                         "ge"                    "1.85-87"         "1.85-87"
+ 71.                         "ge"                    "2.85-103"        "2.85-103"
+ 72.                         "goldwind"              "gw87/1500"       "gw87/1500"
+ 73.                         "siemens"               "swt-3.0-101"     "swt-3.0-101"
+ 74.                         "siemens"               "swt-3.2-113"     "swt-3.2-113"
+ 75.                         "vestas"                "v100-2.0"        "v100/2000"
+ 76.                         "vestas"                "v110-2.0"        "v110/2000"
+ 77.                         "vestas"                "v112-3.3"        "v112/3300"
+ 78.                         "nedwind"               "40"              "40/500"
+ 79.                         "goldwind"              "gw100-2.5"       "gw100/2500"
+ 80.                         "nordex"                "n54/1000"        "n54/1000"
+ 81.                         "suzlon"                "s97-2100"        "s97/2100"
+ 82.                         "suzlon"                "s95-2100"        "s95/2100"
+ 83.                         "bonus"                 "b62/1300"        "b62/1300"
+ 84.                         "gamesa"                "g114-2.0"        "g114/2000"
+ 85.                         "kenersys"              "k100 2.5"        "k100"
+ 86.                         "nordex"                "n117/2400"       "n117/2400"
+ 87.                         "nordtank"              "ntk 150/25"      "ntk150/25"
+ 88.         end
+
+.         compress
+  variable turbinemanufacturer was str50 now str10
+  variable turbinemodel was str50 now str11
+  variable powercurve_turbinemodel was str50 now str21
+  (9,396 bytes saved)
+
+.         tempfile perfect_matches
+
+.         save "`perfect_matches'"
+file C:\Users\Rich\AppData\Local\Temp\ST_42f8_000002.tmp saved
+
+. restore
+
+. 
+. compress
+  variable turbinemanufacturer was str29 now str10
+  variable turbinemodel was str33 now str13
+  variable powercurve_turbinemodel was str55 now str31
+  (210,609 bytes saved)
+
+. merge 1:1 turbinemanufacturer turbinemodel powercurve_turbinemodel using "`perfect_matches'", gen(non_perfect)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                         3,256
+        from master                     3,256  (non_perfect==1)
+        from using                          0  (non_perfect==2)
+
+    matched                                87  (non_perfect==3)
+    -----------------------------------------
+
+. assert non_perfect != 2
+
+. 
+. * FILTER OUR PERFECT-MATCHES AND FOCUS ON NON-MATCHES
+. bys turbinemanufacturer turbinemodel: egen perfect_match = total(non_perfect == 3)
+
+. *Drop models that were perfectly matched
+. drop if perfect_match == 1
+(2,416 observations deleted)
+
+. drop perfect_match
+
+. drop if turbinemanufacturer == "" 
+(1 observation deleted)
+
+. 
+. * DATASET OF IMPERFECT MATCHES BETWEEN THE DATASETS
+. preserve
+
+.         clear
+
+.         input str50 turbinemanufacturer      str50 turbinemodel    str50 powercurve_turbinemodel        
+
+                                    turbinemanufacturer                                        turbinemodel                             pow
+> ercurve_turbinemodel
+  1.                                         "ge"                                    "1.5 ess"                       "1.5sle 77m 1.5mw"    
+>                                                                           
+  2.                                         "ge"                                    "1.6 sle"                       "1.6-82.5"            
+>                   
+  3.                                         "samsung"                               "shi 2.5 mw"            "25s"                         
+>                   
+  4.                                         "siemens"                               "swt-2.3-108"           "swt-2.3-101"                 
+>                                                           
+  5.                                         "sany"                  "se10020iiie-3"     "se9320iii-3"
+  6.                                         "sany"                  "se11020"           "se9320iii-3"
+  7.                                         "ge"                    "1.6-103"               "1.6-100"
+  8.                                         "bonus"                 "b65/13"            "b62/1300"
+  9.                                         "ge"                    "1.7-103"           "1.7-100"
+ 10. 
+.         end
+
+.         compress
+  variable turbinemanufacturer was str50 now str7
+  variable turbinemodel was str50 now str13
+  variable powercurve_turbinemodel was str50 now str16
+  (1,026 bytes saved)
+
+.         tempfile imperfect_matches
+
+.         save "`imperfect_matches'"
+file C:\Users\Rich\AppData\Local\Temp\ST_42f8_000004.tmp saved
+
+. restore
+
+. 
+. merge 1:1 turbinemanufacturer turbinemodel powercurve_turbinemodel using "`imperfect_matches'", gen(imperfect_matches)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                           917
+        from master                       917  (imperfect_matches==1)
+        from using                          0  (imperfect_matches==2)
+
+    matched                                 9  (imperfect_matches==3)
+    -----------------------------------------
+
+. assert imperfect_matches != 2
+
+. 
+. * FILTER OUT IMPERFECT MATCHES TO LOOK AT WHAT REMAINS
+. bys turbinemanufacturer turbinemodel: egen imperfect_match = total(imperfect_matches == 3)
+
+. *Drop models that were perfectly matched
+. drop if imperfect_match == 1
+(173 observations deleted)
+
+. drop imperfect_match
+
+. drop if turbinemanufacturer == "" 
+(0 observations deleted)
+
+. 
+. ********************************************************************************
+. *               CREATE CROSS-WALK BETWEEN TURBINE LIST AND POWERCURVE
+. ********************************************************************************
+. use "$generated_data/standardized_turbine_list.dta", clear
+
+. 
+. gen flag_powercurve = 0
+
+. 
+. merge m:1 turbinemanufacturer turbinemodel using "`perfect_matches'"
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                           130
+        from master                       130  (_merge==1)
+        from using                          0  (_merge==2)
+
+    matched                               829  (_merge==3)
+    -----------------------------------------
+
+. assert _merge != 2
+
+. replace flag_powercurve = 2 if _merge == 3
+(829 real changes made)
+
+. drop _merge
+
+. 
+. /* powercurve_turbinemodel is now in the master dataset from previous merge. Need to use update
+>    and replace so that for missing values of this variable we use the using data-set
+> */
+. merge m:1 turbinemanufacturer turbinemodel using "`imperfect_matches'", update replace
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                           921
+        from master                       921  (_merge==1)
+        from using                          0  (_merge==2)
+
+    matched                                38
+        not updated                         0  (_merge==3)
+        missing updated                    38  (_merge==4)
+        nonmissing conflict                 0  (_merge==5)
+    -----------------------------------------
+
+. assert _merge != 2
+
+. replace flag_powercurve = 1 if _merge == 4
+(38 real changes made)
+
+. drop _merge
+
+. 
+. label define pcurve_match 0 "Unmatched" 1 "Imperfect Match" 2 "Matched"
+
+. label val flag_powercurve pcurve_match
+
+. 
+. * FOR UNMATCHED FACILITIES, GOING TO USE MODAL TURBINE IN CROSSWALK
+. local unmatched flag_powercurve == 0
+
+. qui replace turbinemanufacturer = "ge" if `unmatched'
+
+. qui replace powercurve_turbinemodel = "1.5sle" if `unmatched'
+
+. 
+. * BRING IN POWERCURVE INFORMATION
+. merge m:1 turbinemanufacturer powercurve_turbinemodel using "$generated_data/power_curve.dta", keep(matched master) nogen
+(note: variable turbinemanufacturer was str10, now str29 to accommodate using data's values)
+(note: variable powercurve_turbinemodel was str21, now str55 to accommodate using data's values)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                               959  
+    -----------------------------------------
+
+. keep facilityid turbinemanufacturer flag_powercurve powercurve_turbinemodel powercurve_max_cap w*
+
+. compress
+  variable flag_powercurve was float now byte
+  variable powercurve_max_cap was float now int
+  variable w0 was float now byte
+  variable w1 was double now byte
+  variable w3 was double now byte
+  variable w4 was double now byte
+  variable w28 was double now int
+  variable w30 was double now int
+  variable w31 was double now int
+  variable w32 was double now int
+  variable w33 was double now int
+  variable w34 was double now int
+  variable w35 was double now int
+  variable w36 was double now int
+  variable w37 was double now int
+  variable w38 was double now int
+  variable w39 was double now int
+  variable w40 was double now int
+  variable w41 was double now int
+  variable w42 was double now int
+  variable w43 was double now int
+  variable w44 was double now int
+  variable w45 was double now int
+  variable w46 was double now int
+  variable w47 was double now int
+  variable w48 was double now int
+  variable w49 was double now int
+  variable w50 was double now int
+  variable w51 was double now int
+  variable w52 was double now int
+  variable w53 was double now int
+  variable w54 was double now int
+  variable w55 was double now int
+  variable w56 was double now int
+  variable w57 was double now int
+  variable w58 was double now int
+  variable w59 was double now int
+  variable w60 was double now int
+  variable turbinemanufacturer was str29 now str10
+  variable powercurve_turbinemodel was str55 now str21
+  (262,766 bytes saved)
+
+. save "$generated_data/models_powercurve_xwalk.dta", replace
+file D:/Dropbox/projects/joe_aldy/1603/generated_data/models_powercurve_xwalk.dta saved
+
+. *********************************************************************************
+. tempsetup
+D:\GitDir\Projects\ags_capital_vs_output\temp
+
+. capture log close

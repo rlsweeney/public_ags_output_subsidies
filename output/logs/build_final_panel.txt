@@ -1,0 +1,226 @@
+-------------------------------------------------------------------------------------------------------------------------------------------
+      name:  <unnamed>
+       log:  D:\GitDir\Projects\ags_capital_vs_output/output/logs/build_final_panel.txt
+  log type:  text
+ opened on:  20 Mar 2019, 21:46:55
+
+. ********************************************************************************
+. cd "$generated_data"
+D:\Dropbox\projects\joe_aldy\1603\generated_data
+
+. *********************************************
+. * CREATE A LIST OF FACILITIES IN WIND DATA 
+. *********************************************
+. use "windspeed.dta", clear
+
+. keep facilityid
+
+. duplicates drop
+
+Duplicates in terms of all variables
+
+(138,730 observations deleted)
+
+. tempfile facilities_with_wind
+
+. save "`facilities_with_wind'"
+file C:\Users\Rich\AppData\Local\Temp\ST_42f8_000001.tmp saved
+
+. ********************************************************************************
+. *                                       DATASET AT THE FACILITY LEVEL (STATIC)
+. ********************************************************************************
+. 
+. * START WITH FACILITIES THAT CONTAIN BOTH 860 AND 923 DATA
+. use "eia_static.dta", clear
+
+. drop manufacturer_eia model_eia // non-standardized versions. duplicates and typos
+
+. 
+. * Bring in Standardized Manufacturer and Model Name
+. merge 1:1 facilityid using "standardized_turbine_list.dta", /// 
+> keep(master matched) nogen keepusing(turbinemanufacturer turbinemodel)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                               959  
+    -----------------------------------------
+
+. 
+. * Bring in Powercurve Static Variables
+. merge 1:1 facilityid using "models_powercurve_xwalk.dta", ///
+> keep(master matched) keepusing(flag_powercurve powercurve_turbinemodel powercurve_max_cap) nogen
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                               959  
+    -----------------------------------------
+
+. 
+. * Create an indicator for facilities with wind data
+. merge 1:1 facilityid using "`facilities_with_wind'"
+(note: variable facilityid was long, now double to accommodate using data's values)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                           143
+        from master                       143  (_merge==1)
+        from using                          0  (_merge==2)
+
+    matched                               816  (_merge==3)
+    -----------------------------------------
+
+. assert _merge != 2
+
+. gen flag_in_wind = cond(_merge == 3, 1, 0)
+
+. drop _merge
+
+. label var flag_in_wind "Indicator - Facility has Wind Data"
+
+. 
+. * Merge in AWEA Information
+. merge 1:1 facilityid using "awea.dta", keep(master matched)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                            30
+        from master                        30  (_merge==1)
+        from using                          0  (_merge==2)
+
+    matched                               929  (_merge==3)
+    -----------------------------------------
+
+. gen flag_in_awea = cond(_merge == 3, 1, 0)
+
+. drop awea_manufacturer awea_model _merge
+
+. 
+. * Merge in 1603 Information
+. merge 1:1 facilityid using "1603_info.dta", nogen keep(master matched)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                           701
+        from master                       701  
+        from using                          0  
+
+    matched                               258  
+    -----------------------------------------
+
+. 
+. * Merge in SNL data
+. merge 1:1 facilityid using "snl_data.dta", nogen keep(master matched)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                            26
+        from master                        26  
+        from using                          0  
+
+    matched                               933  
+    -----------------------------------------
+
+. 
+. qui compress
+
+. save "final_panel_static.dta", replace
+file final_panel_static.dta saved
+
+. ********************************************************************************
+. *                       DATA-SET AT FACILITYID - YEAR - MONTH LEVEL (DYNAMIC)
+. ********************************************************************************
+. 
+. * CREATING SEPERATE DATASET OF ONLY DYNAMIC VARS  BUT NEED STATE TO MERGE IN RPS/RECS
+. keep facilityid state
+
+. 
+. * EIA 
+. merge 1:m facilityid using "eia_dynamic.dta", nogen keep(master matched)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                            81,828  
+    -----------------------------------------
+
+. 
+. * WIND SPEEDS
+. merge 1:1 facilityid year month using "windspeed.dta", nogen keep(master matched)
+(note: variable facilityid was long, now double to accommodate using data's values)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                        10,202
+        from master                    10,202  
+        from using                          0  
+
+    matched                            71,626  
+    -----------------------------------------
+
+. 
+. * CALCULATED OUTPUT BASED ON WIND SPEED
+. merge 1:1 facilityid year month using "calculated_output.dta", nogen keep(master matched)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                        10,202
+        from master                    10,202  
+        from using                          0  
+
+    matched                            71,626  
+    -----------------------------------------
+
+. 
+. ********************************************************************************
+. 
+. * MERGE REC AND RPS BY STATE-YEAR-MONTH
+. merge m:1 state year month using "state_year_month_rps_rec.dta", nogen keep(master matched)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                            81,828  
+    -----------------------------------------
+
+. 
+. * BRING IN OUT_OF_STATE EXPECTED REC PRICE
+. merge m:1 state year month using "recs_out_of_state_adjustment.dta", nogen keep(master matched)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                        13,644
+        from master                    13,644  
+        from using                          0  
+
+    matched                            68,184  
+    -----------------------------------------
+
+. 
+. * BRING IN EIA 826 AVERAGE STATE ELECTRICTY PRICES MONTHLY
+. merge m:1 state year month using "EIA_826.dta", nogen keep(master matched)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                            81,828  
+    -----------------------------------------
+
+. 
+. sort facilityid year month
+
+. order facilityid year month
+
+. compress
+  variable facilityid was double now long
+  (327,312 bytes saved)
+
+. save "final_panel_dynamic.dta", replace
+file final_panel_dynamic.dta saved
+
+. ********************************************************************************
+. tempsetup
+D:\GitDir\Projects\ags_capital_vs_output\temp
+
+. capture log close

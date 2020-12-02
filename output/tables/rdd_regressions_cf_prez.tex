@@ -1,0 +1,18 @@
+{
+\def\sym#1{\ifmmode^{#1}\else\(^{#1}\)\fi}
+\begin{tabular}{l*{4}{c}}
+\toprule
+                &\multicolumn{1}{c}{(1)}         &\multicolumn{1}{c}{(2)}         &\multicolumn{1}{c}{(3)}         &\multicolumn{1}{c}{(4)}         \\
+\midrule
+1603 Grant      &    -3.63\sym{***}&    -2.84\sym{***}&    -2.89\sym{**} &    -3.16\sym{***}\\
+                &   (0.90)         &   (0.83)         &   (1.24)         &   (1.17)         \\
+\midrule
+Regression Type &      OLS         &      OLS         &     2SLS         &     2SLS         \\
+Controls        &        Y         &        Y         &        Y         &        Y         \\
+State FE        &        N         &        Y         &        N         &        Y         \\
+R-sq.           &    0.557         &    0.660         &        -         &        -         \\
+N               &     8752         &     8752         &     8752         &     8752         \\
+First-stage F-stat.&                  &                  &      169         &      113         \\
+\bottomrule
+\end{tabular}
+}

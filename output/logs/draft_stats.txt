@@ -1,0 +1,42 @@
+-------------------------------------------------------------------------------------------------------------------
+      name:  <unnamed>
+       log:  D:\GitDir\Projects\ags_capital_vs_output/output/logs/draft_stats.txt
+  log type:  text
+ opened on:   1 Aug 2020, 22:30:37
+
+. ********************************************************************************
+. qui{ 
+
+. 
+. forval i = 1/`ns' {
+  2.         local td = stat_description[`i']
+  3.         local tv = stat_value[`i']
+  4.         di "`td'  =   `tv'"
+  5. 
+.         file open myfile using "$repodir/output/estimates/stat_`td'.tex", write text replace 
+  6.         file write myfile "`tv'"
+  7.         file close myfile
+  8. }
+rd_estimate  =   2.89
+(note: file D:\GitDir\Projects\ags_capital_vs_output/output/estimates/stat_rd_estimate.tex not found)
+match_estimate  =   3.72
+(note: file D:\GitDir\Projects\ags_capital_vs_output/output/estimates/stat_match_estimate.tex not found)
+rd_estimate_pct  =   10
+(note: file D:\GitDir\Projects\ags_capital_vs_output/output/estimates/stat_rd_estimate_pct.tex not found)
+match_estimate_pct  =   12
+(note: file D:\GitDir\Projects\ags_capital_vs_output/output/estimates/stat_match_estimate_pct.tex not found)
+avg_cf  =   32.55
+(note: file D:\GitDir\Projects\ags_capital_vs_output/output/estimates/stat_avg_cf.tex not found)
+avg_cf_1603  =   30.32
+(note: file D:\GitDir\Projects\ags_capital_vs_output/output/estimates/stat_avg_cf_1603.tex not found)
+avg_estimate  =   3.3
+(note: file D:\GitDir\Projects\ags_capital_vs_output/output/estimates/stat_avg_estimate.tex not found)
+N_total_sample  =   465
+(note: file D:\GitDir\Projects\ags_capital_vs_output/output/estimates/stat_N_total_sample.tex not found)
+
+. 
+. ********************************************************************************
+. tempsetup
+D:\GitDir\Projects\ags_capital_vs_output\temp
+
+. capture log close

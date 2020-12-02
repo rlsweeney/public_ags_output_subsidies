@@ -1,0 +1,1181 @@
+--------------------------------------------------------------
+      name:  <unnamed>
+       log:  D:\GitDir\Projects\ags_capital_vs_output/output/l
+> ogs/eia_proposal_data_prep.txt
+  log type:  text
+ opened on:  21 Dec 2018, 10:16:03
+
+. ************************************************************
+> ********************
+. 
+. global eia860 "$dropbox/Data/public/eia/eia_860"
+
+. 
+. ************************************************************
+> ********************
+. *                                                           
+>     PROGRAMS
+. ************************************************************
+> ********************
+. * PROGRAM TO STANDARDIZE ID VARS ACROSS ALL FILES
+. capture program drop standardize_id_variables
+
+. program define standardize_id_variables
+  1. 
+.         qui {
+  2.                 renvars, lower
+  3.                 renvars, subs("_" "")
+  4. 
+.                 capture rename utilcode    operatorid
+  5.                 capture rename utilitycode operatorid
+  6.                 capture rename utilityid   operatorid
+  7.                 capture rename utilityname operatorname
+  8.                 capture rename utilname    operatorname
+  9.                 capture rename eiautilitycode operatorid
+ 10. 
+.                 capture rename plntcode  facilityid
+ 11.                 capture rename plantid   facilityid
+ 12.                 capture rename plantcode facilityid
+ 13.                 capture rename plntname  facilityname
+ 14.                 capture rename plantname facilityname
+ 15. 
+.                 capture rename gencode     genid
+ 16.                 capture rename generatorid genid
+ 17.                 capture rename generatorcode genid
+ 18. 
+.         }
+ 19. end
+
+. 
+. capture program drop replacevar
+
+. program define replacevar
+  1.         syntax varlist(max = 1), oldval(str) newval(str)
+  2.         
+.         replace `varlist' = "`newval'" if `varlist' == "`old
+> val'"
+  3. end
+
+. 
+. capture program drop update_mover
+
+. program define update_mover
+  1.         replacevar primemover, oldval("ST") newval("Steam
+>  Turbine")
+  2.         replacevar primemover, oldval("GT") newval("Gas T
+> urbine")
+  3.         replacevar primemover, oldval("IC") newval("Inter
+> nal Combustion Engine")
+  4.         replacevar primemover, oldval("CA") newval("Combi
+> ned Cycle - Steam")
+  5.         replacevar primemover, oldval("CT") newval("Combi
+> ned Cycle - Combustion")
+  6.         replacevar primemover, oldval("CS") newval("Combi
+> ned Cycle - Single Shaft")
+  7.         replacevar primemover, oldval("CC") newval("Combi
+> ned Cycle - Total Unit") 
+  8.         replacevar primemover, oldval("HC") newval("Hydra
+> ulic Turbine")
+  9.         replacevar primemover, oldval("HY") newval("Hydra
+> ulic Turbine")
+ 10.         replacevar primemover, oldval("PS") newval("Hydra
+> ulic Turbine - Reversible")
+ 11.         replacevar primemover, oldval("BT") newval("Binar
+> y Cycle Turbines")
+ 12.         replacevar primemover, oldval("PV") newval("Photo
+> voltaic")
+ 13.         replacevar primemover, oldval("WT") newval("Wind 
+> Turbine")
+ 14.         replacevar primemover, oldval("CE") newval("Compr
+> essed Air Storage")
+ 15.         replacevar primemover, oldval("FC") newval("Fuel 
+> Cell")
+ 16.         replacevar primemover, oldval("OT") newval("Other
+> ")
+ 17.         replacevar primemover, oldval("WS") newval("Wind 
+> Turbine")
+ 18.         replacevar primemover, oldval("BA") newval("Energ
+> y Storage, Battery")
+ 19.         replacevar primemover, oldval("CP") newval("Energ
+> y Storage, Solar")
+ 20.         replacevar primemover, oldval("FW") newval("Energ
+> y Storage, Flywheel")
+ 21.         replacevar primemover, oldval("HA") newval("Hydro
+> kinetic, Axial Flow")
+ 22.         replacevar primemover, oldval("HB") newval("Hydro
+> kinetic, Wave Buoy")
+ 23. end
+
+. 
+. * THIS PROGRAM CREATES A FLAG FOR TWO FUNDAMNETALLY DIFFEREN
+> T TECHNOLOGIES
+. capture program drop flag_diff_tech
+
+. program define flag_diff_tech
+  1. 
+.         * Create flag for facilities with two (fundamentally
+> ) differnet primemover technologies)
+.         egen num_technology = nvals(primemover), by(facility
+> id eia860yr)
+  2.         gen two_technologies = cond(num_technology > 1, 1
+> , 0)
+  3. 
+.         * Now only keep those with two fundamentally differe
+> nt technologies
+.         bys facilityid eia860yr: gen numobs = _N
+  4.         bys facilityid eia860yr: egen total_gas = ///
+>                                                          tot
+> al(inlist(primemover, "Combined Cycle - Combustion", ///
+>                                                             
+>                                               "Combined Cycl
+> e - Single Shaft", ///
+>                                                             
+>                                               "Combined Cycl
+> e - Steam", ///
+>                                                             
+>                                               "Combined Cycl
+> e - Total Unit", ///
+>                                                             
+>                                               "Gas Turbine",
+>  ///
+>                                                             
+>                                               "Steam Turbine
+> ", ////
+>                                                             
+>                                               "Internal Comb
+> ustion Engine"))
+  5.         replace two_technologies = 0 if num_technology > 
+> 1 & total_gas == numobs        
+  6.         drop numobs total_gas num_technology
+  7. end
+
+. ************************************************************
+> ********************
+. *                                               GET EIA PLAN
+> T DATA
+. ************************************************************
+> ********************
+. **********************
+. * FACILITY LEVEL DATA
+. **********************
+. forval y = 1990 / 2016 {
+  2.         di "`y'"
+  3.         qui cd "$eia860/eia860`y'"
+  4.         *****IMPORT DATA - DIFF YEARS, DIFF FILE FORMATS 
+> *******
+.         local twodigit = substr("`y'", 3, .)
+  5.         clear
+  6.         if `y' < 1992      import excel using  "PlantY`tw
+> odigit'.xls", firstrow
+  7.         else if `y' < 1995 import excel using "PLNT`twodi
+> git'.xls", firstrow 
+  8.         else if `y' < 1998 import excel using "PLANTY`two
+> digit'.xls", firstrow
+  9.         else if `y' <= 2000 import excel using "Plant`y'.
+> xls", firstrow
+ 10.         if inrange(`y', 2001, 2003) import delimited usin
+> g "PLANTY`twodigit'", clear
+ 11.         else if `y' > 2003 {
+ 12.                 local start_2nd_row cellrange(A2)
+ 13.                 if inrange(`y', 2004, 2009)      import e
+> xcel using  "PlantY`twodigit'.xls", firstrow
+ 14.                 else if `y' == 2010              import e
+> xcel using  "PlantY`y'.xls", firstrow
+ 15.                 else if inrange(`y', 2011, 2012) import e
+> xcel using  "PlantY`y'.xlsx", firstrow `start_2nd_row'
+ 16.                 else                             import e
+> xcel using  "2___Plant_Y`y'.xlsx", firstrow `start_2nd_row'
+ 17.         }
+ 18.         qui {
+ 19.                 standardize_id_variables
+ 20.                 
+.                 capture rename plntzip zip
+ 21.                 capture rename plantzipcode zip
+ 22.                 capture rename zip5 zip
+ 23.                 capture rename plantzip5 zip
+ 24.                 capture rename plantzipcd zip
+ 25.                 capture rename plntstate state
+ 26.                 capture rename plantstate state
+ 27.                 capture rename plntst state
+ 28.         
+.                 destring zip, replace
+ 29.                 if `y' != 2000 {
+ 30.                         keep operatorid facilityid facili
+> tyname state zip 
+ 31.                 }
+ 32.                 * 2000 doesn't have facilityname
+.                 else {
+ 33.                         keep operatorid facilityid state 
+> zip 
+ 34.                 }
+ 35.                 gen eia860yr = `y'      
+ 36.                 
+.                 tempfile plant`y'
+ 37.                 save "`plant`y''"
+ 38.         }
+ 39. }
+1990
+1991
+1992
+1993
+1994
+1995
+1996
+1997
+1998
+1999
+2000
+2001
+(10 vars, 5,646 obs)
+2002
+(11 vars, 5,726 obs)
+2003
+(11 vars, 5,832 obs)
+2004
+2005
+2006
+2007
+2008
+2009
+2010
+2011
+2012
+2013
+2014
+2015
+2016
+
+. clear 
+
+. forval y = 1990 / 2016 {
+  2.         append using "`plant`y''"
+  3. }
+(note: variable facilityid was int, now long to accommodate
+       using data's values)
+(note: variable facilityname was str20, now str30 to
+       accommodate using data's values)
+(note: variable facilityname was str30, now str40 to
+       accommodate using data's values)
+(note: variable facilityname was str40, now str41 to
+       accommodate using data's values)
+(note: variable facilityname was str41, now str45 to
+       accommodate using data's values)
+
+. drop operatorid
+
+. *TAKE MOST RECENT FACILITY NAME AND FILL IN FOR ALL YEARS
+. duplicates drop
+
+Duplicates in terms of all variables
+
+(4,120 observations deleted)
+
+. bys facilityid (eia860yr): gen fac_name = facilityname[_N]
+(13,220 missing values generated)
+
+. bys facilityid : egen common_fac_name = mode(facilityname), 
+> minmode missing
+(28 missing values generated)
+
+. replace fac_name = common_fac_name if fac_name == ""
+(13,196 real changes made)
+
+. drop facilityname common_fac_name
+
+. rename fac_name facilityname
+
+. 
+. * Get Plant Identifiers
+. bys facilityid (eia860yr): keep if _n == _N
+(144,156 observations deleted)
+
+. drop eia860yr
+
+. duplicates drop
+
+Duplicates in terms of all variables
+
+(0 observations are duplicates)
+
+. save "facilities.dta", replace
+file facilities.dta saved
+
+. ************************************************************
+> ********************
+. *                                                       ACTU
+> AL GENERATION
+. ************************************************************
+> ********************
+. forval y = 1990 / 2016 {
+  2.         clear
+  3.         qui cd "$eia860/eia860`y'"
+  4.         di "`y'"
+  5.         
+.         local twodigit = substr("`y'", 3, .)
+  6.         local st_two cellrange(A2)
+  7. 
+.         
+.         if `y' < 1992       import excel using "GENTYPE3Y`tw
+> odigit'.xls", clear firstrow
+  8.         else if `y' < 1995  import excel using "TYPE3`two
+> digit'.xls", clear firstrow
+  9.         else if `y' < 1997  import excel using "TYPE3Y`tw
+> odigit'.xls", clear firstrow
+ 10.         else if `y' == 1997 import excel using "GENERTOR.
+> xls", clear firstrow
+ 11.         else if `y' == 1998  import excel using "Existing
+> Generators`y'", clear firstrow sheet("`y' Existing Generator
+> s")
+ 12.         else if `y' < 2001  import excel using "ExistingG
+> enerators`y'", clear firstrow sheet("Existing Generators")
+ 13.         else if inrange(`y', 2001, 2003) import delimited
+>  using "GENY`twodigit'", clear         
+ 14.         else if inrange(`y', 2004, 2008) import excel usi
+> ng "GenY`twodigit'.xls", firstrow
+ 15.         else if `y' == 2009         import excel using "G
+> eneratorY`twodigit'.xls", firstrow sheet("Exist") 
+ 16.         else if `y' == 2010         import excel using "G
+> eneratorsY`y'.xls", firstrow sheet("Exist")
+ 17.         else if `y' == 2011         import excel using "G
+> eneratorY`y'.xlsx", firstrow `st_two' sheet("operable")
+ 18.         else if `y' == 2012         import excel using "G
+> eneratorY`y'.xlsx", firstrow `st_two' sheet("Operable")
+ 19.         else                        import excel using "3
+> _1_Generator_Y`y'.xlsx", firstrow `st_two' sheet("Operable")
+ 20. 
+.         qui {
+ 21.                 standardize_id_variables
+ 22.                 
+.                 capture rename nameplate nameplate_capacity
+ 23.                 capture rename existingnameplate nameplat
+> e_capacity
+ 24.                 capture rename nameplatecapacitymw namepl
+> ate_capacity   
+ 25.                 capture rename (insvmonth insvyear) (oper
+> atingmonth operatingyear)
+ 26.                 capture rename (inservicemonth inservicey
+> ear) (operatingmonth operatingyear)
+ 27.                 capture rename (inservmth inservyr) (oper
+> atingmonth operatingyear)
+ 28. 
+.         
+.                 gen eia860yr = `y'
+ 29.                 
+.                 local destring_vars nameplate_capacity opera
+> tingmonth operatingyear facilityid eia860yr 
+ 30.                 destring `destring_vars', replace
+ 31.                 
+.                 keep `destring_vars' genid primemover
+ 32.                 
+.                 tempfile geni`y'
+ 33.                 qui save "`geni`y''"
+ 34.         }
+ 35. }
+1990
+1991
+1992
+1993
+1994
+1995
+1996
+1997
+1998
+1999
+2000
+2001
+(37 vars, 16,029 obs)
+2002
+(38 vars, 16,801 obs)
+2003
+(38 vars, 17,366 obs)
+2004
+2005
+2006
+2007
+2008
+2009
+2010
+2011
+2012
+2013
+2014
+2015
+2016
+
+. clear 
+
+. forval y = 1990 / 2016 {
+  2.         di "`y'"
+  3.         append using "`geni`y''"
+  4. }
+1990
+1991
+1992
+1993
+1994
+1995
+1996
+1997
+1998
+1999
+2000
+(note: variable operatingmonth was byte, now int to
+       accommodate using data's values)
+2001
+(note: variable facilityid was int, now long to accommodate
+       using data's values)
+(note: variable nameplate_capacity was long, now double to
+       accommodate using data's values)
+2002
+2003
+2004
+2005
+2006
+2007
+2008
+2009
+2010
+2011
+2012
+2013
+2014
+2015
+2016
+
+. 
+. /* Found out that some generators don't come online until ex
+>  1999
+>    but are in data earlier with all zeros. delete those */
+. drop if nameplate_capacity == 0 & operatingmonth == 0 & oper
+> atingyear == 0
+(9,462 observations deleted)
+
+. 
+. * Clean Prime Mover
+. update_mover
+variable primemover was str2 now str13
+(88,893 real changes made)
+(64,414 real changes made)
+variable primemover was str13 now str26
+(131,221 real changes made)
+(10,146 real changes made)
+variable primemover was str26 now str27
+(18,089 real changes made)
+variable primemover was str27 now str29
+(942 real changes made)
+(16 real changes made)
+(17,803 real changes made)
+(85,513 real changes made)
+variable primemover was str29 now str30
+(3,270 real changes made)
+(890 real changes made)
+(7,306 real changes made)
+(10,223 real changes made)
+(22 real changes made)
+(464 real changes made)
+(396 real changes made)
+(1 real change made)
+(145 real changes made)
+(11 real changes made)
+(22 real changes made)
+(0 real changes made)
+(0 real changes made)
+
+. 
+. * FLAG DIFFERENT TECHNOLOGIES
+. flag_diff_tech
+(3 missing values generated)
+(94,635 real changes made)
+
+. 
+. * STARTING IN 2001, IT WAS IN MEGAWATTS
+. replace nameplate_capacity = nameplate_capacity / 1000 if ei
+> a860yr < 1998
+(105,738 real changes made)
+
+. 
+. bys facilityid eia860yr: egen primemover_mode = mode(primemo
+> ver), missing minmode
+(3 missing values generated)
+
+. bys facilityid eia860yr: gen num_gens = _N
+
+. 
+. bys facilityid: egen totalwind = total(regexm(primemover, "W
+> ind"))
+
+. gen wind_tech = cond(totalwind >=1 , 1,0)
+
+. drop totalwind 
+
+. 
+. /* For those with wind only keep those generators */
+. keep if wind_tech == 0 | regexm(primemover, "Wind")
+(1,962 observations deleted)
+
+. 
+. 
+. * SOME MONTHS AND YEARS ARE FLIPPED
+. gen flag = cond(operatingmonth > 1000, 1, 0)
+
+. gen temp = operatingmonth
+(77 missing values generated)
+
+. replace operatingmonth = operatingyear if flag
+(14,581 real changes made)
+
+. replace operatingyear = temp if flag
+(14,581 real changes made, 59 to missing)
+
+. drop temp flag
+
+.                  
+. * TAKE MAX CAPACITY ACROSS YEARS
+. collapse (sum) nameplate_capacity (firstnm) wind_tech two_te
+> chnologies num_gens primemover  ///
+> (min) operatingyear operatingmonth, by(facilityid eia860yr)
+
+. 
+. * CLEAN SOME DATES
+. replace operatingmonth = . if operatingmonth == 88 | operati
+> ngmonth == 99
+(10,097 real changes made, 10,097 to missing)
+
+. replace operatingyear = . if operatingyear == 88 | operating
+> year == 99
+(0 real changes made)
+
+. 
+. rename nameplate_capacity existing_capacity
+
+. compress
+  variable eia860yr was float now int
+  variable wind_tech was float now byte
+  variable two_technologies was float now byte
+  variable num_gens was float now byte
+  (1,511,290 bytes saved)
+
+. save "current_plants.dta", replace
+file current_plants.dta saved
+
+. ************************************************************
+> ********************
+. *                                               PROPOSED GEN
+> ERATORS
+. ************************************************************
+> ********************
+. * SPLIT INTO TWO PIECES
+. capture program drop proposed_vars
+
+. program define proposed_vars
+  1.         capture rename nameplate proposed_capacity
+  2.         capture rename nameplatecapacitymw proposed_capac
+> ity
+  3.         capture rename proposednameplate proposed_capacit
+> y
+  4.         
+.         capture rename status proposed_status
+  5.         capture rename proposedstatus proposed_status
+  6.         
+.         capture rename orgmnth proposed_month
+  7.         capture rename orgmonth proposed_month
+  8.         capture rename orgyear proposed_year
+  9.         capture rename effectivemonth proposed_month
+ 10.         capture rename effectiveyear proposed_year
+ 11. end
+
+. 
+. 
+. * TWO SHEETS: PROPOSED GENERATORS AND CANCELLED - INDEFINITE
+> LY POSTPONED
+. forval y = 1998 / 1999 {
+  2.         di "`y'"
+  3.         qui cd "$eia860/eia860`y'"
+  4.         import excel using "ProposedGenerators`y'.xls", s
+> heet("Proposed Generators") firstrow clear
+  5.         qui standardize_id_variables
+  6.         qui proposed_vars       
+  7.         keep facilityid operatorid genid ///
+>              primemover proposed_capacity proposed_status pr
+> oposed_month proposed_year  
+  8.                  
+.         gen eia860yr = `y'
+  9.         tempfile gens_pr_`y'
+ 10.         save "`gens_pr_`y''"
+ 11. }
+1998
+file C:\Users\Rich\AppData\Local\Temp\ST_14c8_00001l.tmp saved
+1999
+file C:\Users\Rich\AppData\Local\Temp\ST_14c8_00001m.tmp saved
+
+. 
+. forval y = 1998 / 1999 {
+  2.         di "`y'"
+  3.         qui cd "$eia860/eia860`y'"
+  4.         if `y' == 1998      local sheet = "Canceled Indef
+>  Postponed"
+  5.         else if `y' == 1999 local sheet = "Canceled - Ind
+> ef Posponed"
+  6.         
+.         import excel using "ProposedGenerators`y'.xls", shee
+> t("`sheet'") firstrow clear
+  7.         qui standardize_id_variables
+  8.         qui proposed_vars       
+  9.         keep facilityid operatorid genid ///
+>              primemover proposed_capacity proposed_month pro
+> posed_year  
+ 10.         gen proposed_status = "Cancelled/Indefinitely Pos
+> tponed"
+ 11.         
+.         gen eia860yr = `y'
+ 12.         
+.         tempfile gens_re_`y'
+ 13.         save "`gens_re_`y''"
+ 14. }
+1998
+file C:\Users\Rich\AppData\Local\Temp\ST_14c8_00001n.tmp saved
+1999
+file C:\Users\Rich\AppData\Local\Temp\ST_14c8_00001o.tmp saved
+
+. 
+. *****************
+. * COMBINE ABOVE
+. *****************
+. clear
+
+. forval y = 1998 / 1999 {
+  2.         append using "`gens_re_`y''"
+  3.         append using "`gens_pr_`y''"
+  4. }
+(note: variable proposed_year was byte, now int to
+       accommodate using data's values)
+(note: variable primemover was str2, now str5 to accommodate
+       using data's values)
+
+. 
+. * CLEAN SOME DATES
+. gen flag = cond(proposed_month > 1000, 1, 0)
+
+. gen temp = proposed_month
+(1 missing value generated)
+
+. replace proposed_month = proposed_year if flag
+(1,076 real changes made, 37 to missing)
+
+. replace proposed_year = temp if flag
+(1,076 real changes made)
+
+. drop temp flag
+
+. 
+. tempfile gen_1998_1999
+
+. save "`gen_1998_1999'"
+file C:\Users\Rich\AppData\Local\Temp\ST_14c8_00001p.tmp saved
+
+. 
+. *******************
+. * 2000  - 2016
+. *******************
+. global st_two cellrange(A2) firstrow
+
+. forval y = 2000 / 2016 {
+  2.         clear
+  3.         di "`y'"
+  4.         qui cd "$eia860/eia860`y'"
+  5.         
+.         if `y' < 2001 import excel using "ProposedGenerators
+> `y'.xls", firstrow clear
+  6.         
+.         
+.         else if inrange(`y', 2001, 2008) { //seperate file
+  7. 
+.                 *****IMPORT DATA - DIFF YEARS, DIFF FILE FOR
+> MATS *******
+.                 local twodigit = substr("`y'", 3, .)
+  8.                 if inrange(`y', 2001, 2003) import delimi
+> ted using "PRGENY`twodigit'"
+  9.                 else                        import excel 
+> using  "PRGenY`twodigit'.xls", firstrow
+ 10.         }
+ 11.         else {
+ 12.                 local twodigit = substr("`y'", 3, .)
+ 13.                 clear
+ 14.                 
+.                 if `y' == 2009      import excel using "Gene
+> ratorY`twodigit'.xls", sheet("Prop") firstrow
+ 15.                 else if `y' == 2010 import excel using "G
+> eneratorsY`y'.xls", sheet("Prop") firstrow
+ 16.                 else if `y' == 2011 import excel using "G
+> eneratorY`y'.xlsx",  sheet("proposed") $st_two
+ 17.                 else if `y' == 2012 import excel using "G
+> eneratorY`y'.xlsx",  sheet("Proposed") $st_two
+ 18.                 else                import excel using "3
+> _1_Generator_Y`y'.xlsx", sheet("Proposed") $st_two
+ 19.         }
+ 20.         qui standardize_id_variables
+ 21.         capture drop if regexm(operatorid, "NOTE")  // so
+>  operatorid can be destringed
+ 22.         qui proposed_vars
+ 23.         
+.         keep facilityid operatorid genid primemover proposed
+> _capacity proposed_status proposed_month proposed_year
+ 24.         qui destring operatorid proposed_year proposed_mo
+> nth, replace
+ 25.         gen eia860yr = `y'
+ 26.         
+.         * All Missing so treated as numeric - screwing up ap
+> pend
+.         if `y' == 2001 {
+ 27.                 gen prime_move = ""
+ 28.                 drop primemover
+ 29.                 rename prime_move primemover
+ 30.         }
+ 31.         
+.         tempfile proposed_`y'
+ 32.         qui save "`proposed_`y''"
+ 33. }
+2000
+2001
+(27 vars, 2,135 obs)
+(2,135 missing values generated)
+2002
+(28 vars, 2,002 obs)
+2003
+(28 vars, 1,810 obs)
+2004
+2005
+2006
+2007
+2008
+2009
+2010
+2011
+2012
+2013
+2014
+2015
+2016
+
+. clear
+
+. forval y = 2000 / 2016 {
+  2.         di "`y'"
+  3.         append using "`proposed_`y''"
+  4. }
+2000
+2001
+(note: variable facilityid was int, now long to accommodate
+       using data's values)
+(note: variable proposed_capacity was long, now double to
+       accommodate using data's values)
+2002
+2003
+2004
+(note: variable genid was str4, now str5 to accommodate
+       using data's values)
+2005
+2006
+2007
+2008
+2009
+2010
+2011
+2012
+2013
+2014
+2015
+2016
+
+. append using "`gen_1998_1999'"
+(note: variable primemover was str2, now str5 to accommodate
+       using data's values)
+(note: variable proposed_month was byte, now int to
+       accommodate using data's values)
+(note: variable proposed_status was str2, now str32 to
+       accommodate using data's values)
+
+. 
+. drop operatorid
+
+. 
+. * Clean Prime Mover Codes
+. update_mover
+variable primemover was str5 now str13
+(1,635 real changes made)
+(6,966 real changes made)
+variable primemover was str13 now str26
+(2,936 real changes made)
+(2,304 real changes made)
+variable primemover was str26 now str27
+(4,502 real changes made)
+variable primemover was str27 now str29
+(189 real changes made)
+(656 real changes made)
+(6 real changes made)
+(1,165 real changes made)
+variable primemover was str29 now str30
+(5 real changes made)
+(65 real changes made)
+(3,751 real changes made)
+(1,909 real changes made)
+(15 real changes made)
+(71 real changes made)
+(51 real changes made)
+(13 real changes made)
+(67 real changes made)
+(30 real changes made)
+(5 real changes made)
+(6 real changes made)
+(2 real changes made)
+
+. 
+. replacevar proposed_status, oldval("IP") newval("Cancelled/I
+> ndefinitely Postponed")
+(8,479 real changes made)
+
+. replacevar proposed_status, oldval("TS") newval("Constructio
+> n Complete, but not in operation")
+variable proposed_status was str32 now str43
+(1,397 real changes made)
+
+. replacevar proposed_status, oldval("P") newval("Planned but 
+> Reg. approvals not initiated")
+(6,453 real changes made)
+
+. replacevar proposed_status, oldval("L") newval("Reg. approva
+> ls pending")
+(2,608 real changes made)
+
+. replacevar proposed_status, oldval("T") newval("Reg approval
+> s recieved, but not under construction")
+variable proposed_status was str43 now str50
+(1,759 real changes made)
+
+. replacevar proposed_status, oldval("U") newval("Under Constr
+> uction. <= 50 % complete")
+(3,307 real changes made)
+
+. replacevar proposed_status, oldval("V") newval("Under Constr
+> uctions. > 50 % complete")
+(2,909 real changes made)
+
+. replacevar proposed_status, oldval("OT") newval("Other")
+(42 real changes made)
+
+. 
+. order facilityid eia860yr
+
+. sort facilityid eia860yr
+
+. 
+. 
+. flag_diff_tech
+(3362 missing values generated)
+(7,745 real changes made)
+
+. * Make a variable that tracks if the facility has wind_capab
+> ility
+. bys facilityid: egen totalwind = total(regexm(primemover, "W
+> ind"))
+
+. gen wind_tech = cond(totalwind >=1 , 1,0)
+
+. drop totalwind
+
+. 
+. foreach var in proposed_status primemover {
+  2.         bys facilityid eia860yr: egen `var'_mode = mode(`
+> var'), missing minmode
+  3. }
+(3394 missing values generated)
+
+. 
+. 
+. /* For those with wind only keep those generators */
+. keep if wind_tech == 0 | regexm(primemover, "Wind")
+(32 observations deleted)
+
+. 
+. bys facilityid eia860yr: egen proposed_year_mode = mode(prop
+> osed_year), missing minmode
+(25 missing values generated)
+
+. bys facilityid eia860yr: egen proposed_month_mode = mode(pro
+> posed_month), missing minmode
+(67 missing values generated)
+
+. drop proposed_year proposed_month
+
+. 
+. bys facilityid eia860yr: gen proposed_gens = _N
+
+. 
+. collapse (firstnm) *_mode two_technologies wind_tech propose
+> d_gens (sum) proposed_capacity, by(facilityid eia860yr)
+
+. renvars *_mode, subst("_mode" "")
+
+. 
+. 
+. replace proposed_status = "Cancelled/Indefinitely Postponed"
+>  if proposed_status == "CN"
+(329 real changes made)
+
+. 
+. label var proposed_status      "Proposal Status"
+
+. label var primemover           "Type of Power"
+
+. label var wind_tech            "Facility has wind generation
+>  capability"
+
+. label var two_technologies     "Facility has >=2 distinct te
+> chnologies"
+
+. 
+. sort facilityid eia860yr
+
+. order facilityid eia860yr
+
+. compress
+  variable eia860yr was float now int
+  variable proposed_month was int now byte
+  variable two_technologies was float now byte
+  variable wind_tech was float now byte
+  variable proposed_gens was float now byte
+  (163,296 bytes saved)
+
+. save "proposed_plants.dta", replace
+file proposed_plants.dta saved
+
+. 
+. 
+. ************************************************************
+> ********************
+. * COMBINE OPERATING AND PROPOSED DATA
+. ************************************************************
+> ********************
+. 
+. 
+. ******************************
+. * CURRENT PLANTS
+. ******************************
+. use "current_plants.dta", clear
+
+. *keep if wind_tech == 1
+. 
+. bys facilityid: egen first_yr_in_oper_data = min(eia860yr)
+
+. bys facilityid: egen last_yr_in_oper_data = max(eia860yr)
+
+. bys facilityid: egen primemover_mode = mode(primemover), min
+> mode missing
+(3 missing values generated)
+
+. 
+. bys facilityid: egen first_yr_oper = min(operatingyear)
+(3 missing values generated)
+
+. bys facilityid: egen first_mnth_oper = min(operatingmonth)
+(4886 missing values generated)
+
+. 
+. * Joe wants min, max, and mode capacity
+. bys facilityid: egen min_capacity =  min(existing_capacity)
+
+. bys facilityid: egen max_capacity =  max(existing_capacity)
+
+. bys facilityid: egen mode_capacity =  mode(existing_capacity
+> ), minmode missing
+
+. 
+. bys facilityid: egen min_gens =  min(num_gens)
+
+. bys facilityid: egen max_gens =  max(num_gens)
+
+. 
+. bys facilityid: egen has_wind = max(wind_tech)
+
+. bys facilityid: egen mult_tech = max(two_technologies)
+
+. 
+. 
+. keep facilityid min_gens max_gens min_capacity max_capacity 
+> mode_capacity  first_yr_in_oper_data ///
+>      last_yr_in_oper_data primemover_mode first_yr_oper firs
+> t_mnth_oper has_wind mult_tech 
+
+. 
+. duplicates drop
+
+Duplicates in terms of all variables
+
+(127,110 observations deleted)
+
+. 
+. label var min_gens "Min # of Generators reported at Facility
+> "
+
+. label var max_gens "Max # of Generators reported at Faciity"
+
+. label var has_wind "Has Some Wind Technology"
+
+. label var mult_tech "Multiple Technology present"
+
+. label var first_yr_in_oper_data "First Year in 860 Existing/
+> Operating Data"
+
+. label var last_yr_in_oper_data "Last Year in 860 Existing/Op
+> erating Data"
+
+. 
+. label var first_yr_oper   "First Year of Operation"
+
+. label var first_mnth_oper "First Month of Operation"
+
+. 
+. label var min_capacity "Minimum Capacity over years"
+
+. label var max_capacity "Max Capacity over years"
+
+. label var mode_capacity "Modal Capacity over years"
+
+. 
+. label var primemover_mode "Modal Technology"
+
+. 
+. tempfile wind_actual
+
+. save "`wind_actual'"
+file C:\Users\Rich\AppData\Local\Temp\ST_14c8_000029.tmp saved
+
+. ************************************************************
+> ********************
+. *                                                           
+>     PROPOSED PLANTS
+. ************************************************************
+> ********************
+. use "proposed_plants.dta", clear
+
+. bys facilityid: egen proposed_primemover = mode(primemover),
+>  minmode missing
+(1044 missing values generated)
+
+. drop primemover
+
+. 
+. bys facilityid: egen has_wind = max(wind_tech)
+
+. bys facilityid: egen mult_tech = max(two_technologies)
+
+. 
+. drop wind_tech two_technologies
+
+. 
+. ren eia860yr eia860_proposal_year
+
+. label var eia860_proposal_year "Year of 860 Proposed Data"
+
+. 
+. tempfile wind_proposed
+
+. save "`wind_proposed'"
+file C:\Users\Rich\AppData\Local\Temp\ST_14c8_00002a.tmp saved
+
+. ************************************************************
+> ********************
+. use "`wind_actual'"
+
+. 
+. merge 1:m facilityid using "`wind_proposed'"
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                        13,503
+        from master                     7,001  (_merge==1)
+        from using                      6,502  (_merge==2)
+
+    matched                             7,106  (_merge==3)
+    -----------------------------------------
+
+. sort facilityid eia860_proposal_year
+
+. 
+. gen was_proposed = 0
+
+. replace was_proposed = 1 if inlist(_merge, 3, 2)
+(13,608 real changes made)
+
+. 
+. gen was_built = 0 
+
+. replace was_built = 1 if inlist(_merge, 1, 3)
+(14,107 real changes made)
+
+. 
+. gen proposed_and_built = was_proposed*was_built
+
+. 
+. drop _merge
+
+. 
+. by facilityid: egen last_eia860_proposal_year = max(eia860_p
+> roposal_year)
+(7001 missing values generated)
+
+. 
+. * BRING IN FACILITY NAME / STATE
+. merge m:1 facilityid using "facilities.dta", keep(master mat
+> ched) nogen
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             3
+        from master                         3  
+        from using                          0  
+
+    matched                            20,606  
+    -----------------------------------------
+
+. 
+. order facilityid eia860_proposal_year last_eia860_proposal_y
+> ear proposed_year ///
+>         first_yr_oper proposed_and_built was_proposed was_bu
+> ilt has_wind mult_tech ///
+>         proposed_status proposed_primemover facilityname sta
+> te zip 
+
+. 
+. compress
+  variable last_eia860_proposal_year was float now int
+  variable first_yr_oper was float now int
+  variable proposed_and_built was float now byte
+  variable was_proposed was float now byte
+  variable was_built was float now byte
+  variable has_wind was float now byte
+  variable mult_tech was float now byte
+  variable first_yr_in_oper_data was float now int
+  variable last_yr_in_oper_data was float now int
+  variable first_mnth_oper was float now byte
+  variable min_gens was float now byte
+  variable max_gens was float now byte
+  (659,488 bytes saved)
+
+. 
+. save "$repodir/generated_data/eia860_proposed_and_operating.
+> dta", replace
+file D:\GitDir\Projects\ags_capital_vs_output/generated_data/e
+> ia860_proposed_and_operating.dta saved
+
+. 
+. cd "$repodir"
+D:\GitDir\Projects\ags_capital_vs_output
+
+.         
+. ************************************************************
+> ********************
+. tempsetup
+D:\GitDir\Projects\ags_capital_vs_output\temp
+
+. capture log close

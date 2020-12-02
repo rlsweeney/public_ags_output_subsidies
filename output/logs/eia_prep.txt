@@ -1,0 +1,999 @@
+----------------------------------------------------------------------------------------------------------------------------------------
+      name:  <unnamed>
+       log:  D:\GitDir\Projects\ags_capital_vs_output/output/logs/eia_prep.txt
+  log type:  text
+ opened on:  20 Mar 2019, 19:04:35
+
+. ********************************************************************************
+. global eia     "$dropbox/Data/public/eia"
+
+. global eia860  "$eia/eia_860"
+
+. global eia923  "$eia/eia_923"
+
+. ********************************************************************************
+. * PROGRAM TO STANDARDIZE ID VARS ACROSS ALL FILES
+. capture program drop standardize_id_variables
+
+. program define standardize_id_variables
+  1. 
+.         qui {
+  2.                 renvars, lower
+  3.                 renvars, subs("_" "")
+  4. 
+.                 capture rename utilcode    operatorid
+  5.                 capture rename utilityid   operatorid
+  6.                 capture rename utilityname operatorname
+  7.                 capture rename utilname    operatorname
+  8. 
+.                 capture rename plntcode  facilityid
+  9.                 capture rename plantid   facilityid
+ 10.                 capture rename plantcode facilityid
+ 11.                 capture rename plntname  facilityname
+ 12.                 capture rename plantname facilityname
+ 13. 
+.                 capture rename gencode     genid
+ 14.                 capture rename generatorid genid
+ 15.         }
+ 16. end
+
+. 
+. /*Going to do a lot of excel importing all with first row and clear options
+> * PARAMETERS: 
+>         1. file_string - string that contains location of the file
+>         2. list of excel options 
+> */
+. capture program drop import_ex
+
+. program define import_ex
+  1.         args file_string excel_options
+  2.         import excel "`file_string'", `excel_options' firstrow clear
+  3. end
+
+. 
+. ********************************************************************************
+. *                                                               EIA 860 DATA
+. ********************************************************************************
+. 
+. **********************
+. * FACILITY LEVEL DATA
+. **********************
+. forval y = 2002 / 2015 {
+  2.         qui cd "$eia860/eia860`y'"
+  3.         *****IMPORT DATA - DIFF YEARS, DIFF FILE FORMATS *******
+.         local twodigit = substr("`y'", 3, .)
+  4.         if inrange(`y', 2002, 2003) import delimited using "PLANTY`twodigit'", clear
+  5.         else {
+  6.                 local start_2nd_row cellrange(A2)
+  7.                 if inrange(`y', 2004, 2009)      import_ex  "PlantY`twodigit'.xls"
+  8.                 else if `y' == 2010              import_ex  "PlantY`y'.xls"
+  9.                 else if inrange(`y', 2011, 2012) import_ex  "PlantY`y'.xlsx"      `start_2nd_row'
+ 10.                 else                             import_ex  "2___Plant_Y`y'.xlsx" `start_2nd_row'
+ 11.         }
+ 12.         qui {
+ 13.                 standardize_id_variables
+ 14.                 
+.                 capture rename plntzip zip
+ 15.                 capture rename zip5 zip
+ 16.                 capture rename plntstate state
+ 17.                 capture rename nerc nercregion
+ 18.                 capture rename balancingauthoritycode balancingauthority
+ 19.                 capture rename sector sector_number
+ 20.                 capture rename sectornumber sector_number
+ 21.                 capture destring sector_number, replace
+ 22.                 capture rename sectorname sector_name
+ 23.                 capture rename regulatorystatus regulatory_status
+ 24.                 
+.                 destring zip, replace
+ 25.                 gen year = `y'
+ 26.                 local keepvars operatorid facilityid facilityname state zip nercregion year 
+ 27.                 * Regulatory Status (2006-) ISO/RTO Var (2010 - 2012). Balancing Authority (2013-2015)
+.                 * Sector number nad name (2009 - 
+.                 if `y' >= 2006              local keepvars `keepvars' regulatory_status
+ 28.                 if `y' >= 2009              local keepvars `keepvars' sector_name sector_number
+ 29.                 if inrange(`y', 2010, 2012) local keepvars `keepvars' isortocode isorto
+ 30.                 else if `y' >= 2013         local keepvars `keepvars' balancingauthority  latitude longitude
+ 31.                 keep `keepvars'
+ 32.                 
+.                 tempfile plant`y'
+ 33.                 save "`plant`y''"
+ 34.         }
+ 35. }
+(11 vars, 5,726 obs)
+(11 vars, 5,832 obs)
+
+. clear 
+
+. forval y = 2002 / 2015 {
+  2.         append using "`plant`y''"
+  3. }
+(note: variable facilityname was str40, now str41 to accommodate using data's values)
+(note: variable sector_name was str16, now str18 to accommodate using data's values)
+(note: variable facilityname was str41, now str45 to accommodate using data's values)
+
+. destring latitude longitude, replace
+latitude: all characters numeric; replaced as double
+(70985 missing values generated)
+longitude: all characters numeric; replaced as double
+(70987 missing values generated)
+
+. *TAKE MOST RECENT FACILITY NAME AND FILL IN FOR ALL YEARS
+. duplicates drop
+
+Duplicates in terms of all variables
+
+(0 observations are duplicates)
+
+. bys facilityid (year): gen fac_name = facilityname[_N]
+
+. drop facilityname
+
+. rename fac_name facilityname
+
+. 
+. * Create numeric variable for whether in ISO
+. gen in_iso_rto = .
+(96,402 missing values generated)
+
+. replace in_iso_rto = 1 if isorto == "Y"
+(12,930 real changes made)
+
+. replace in_iso_rto = 0 if isorto == "N"
+(7,814 real changes made)
+
+. drop isorto
+
+. compress
+  variable year was float now int
+  variable in_iso_rto was float now byte
+  (482,010 bytes saved)
+
+. save "$repodir/temp/eia_plant_data", replace
+(note: file D:\GitDir\Projects\ags_capital_vs_output/temp/eia_plant_data.dta not found)
+file D:\GitDir\Projects\ags_capital_vs_output/temp/eia_plant_data.dta saved
+
+. 
+. **************************
+. * UTILITY/OPERATOR DATA
+. **************************
+. forval y = 2002 / 2015 {
+  2.         qui cd "$eia860/eia860`y'"
+  3.         *****IMPORT DATA - DIFF YEARS, DIFF FILE FORMATS *******
+.         local twodigit = substr("`y'", 3, .)
+  4.         if inrange(`y', 2002, 2003)      import delimited using "UTILY`twodigit'", clear
+  5.         
+.         else {
+  6.                 local st_two cellrange(A2)
+  7.                 if inrange(`y', 2004, 2008)      import_ex "UtilY`twodigit'.xls"
+  8.                 else if `y' == 2009              import_ex "UtilityY`twodigit'.xls"
+  9.                 else if `y' == 2010              import_ex "UtilityY`y'.xls"
+ 10.                 else if inrange(`y', 2011, 2012) import_ex "UtilityY`y'.xlsx" `st_two'
+ 11.                 else                             import_ex "1___Utility_Y`y'.xlsx" `st_two'
+ 12.         }
+ 13.         qui {
+ 14.                 standardize_id_variables
+ 15.                 capture rename entitytype entity_type
+ 16.                 gen year = `y'
+ 17.                 if `y' >= 2013 keep operatorname operatorid year entity_type
+ 18.                 else keep operatorname operatorid year
+ 19.                 drop if operatorid == 0
+ 20.                 tempfile operator`y'
+ 21.                 save "`operator`y''"
+ 22.         }
+ 23. }
+(25 vars, 6,901 obs)
+(27 vars, 2,968 obs)
+
+. clear 
+
+. forval y = 2002/ 2015 {
+  2.         append using "`operator`y''"
+  3. }
+(note: variable operatorname was str30, now str40 to accommodate using data's values)
+(note: variable operatorname was str40, now str41 to accommodate using data's values)
+(note: variable operatorname was str41, now str50 to accommodate using data's values)
+
+. *Take last operatorname and this will be the source file for operatornames
+. duplicates drop
+
+Duplicates in terms of all variables
+
+(2,166 observations deleted)
+
+. sort operatorid year
+
+. *Entity Type doesn't change by year and take last name
+. collapse (lastnm) operatorname entity_type, by(operatorid)
+
+. tempfile operators
+
+. save "`operators'"
+file C:\Users\Rich\AppData\Local\Temp\ST_44f8_00000t.tmp saved
+
+. 
+. ************************
+. * GENERATOR- LEVEL DATA
+. ************************
+. forval y = 2002 / 2015 {
+  2.         qui cd "$eia860/eia860`y'"
+  3.         
+.         local twodigit = substr("`y'", 3, .)
+  4.         *****IMPORT DATA - DIFF YEARS, DIFF FILE FORMATS *******
+.         if inrange(`y', 2002, 2003) import delimited using "GENY`twodigit'", clear
+  5.         
+.         else { // EXCEL Import - Feed import_ex file_string and excel options
+  6.                 local st_two cellrange(A2)
+  7.                 if inrange(`y', 2004, 2008)      import_ex "GenY`twodigit'.xls"
+  8.                 else if `y' == 2009              import_ex "GeneratorY`twodigit'.xls" 
+  9.                 else if `y' == 2010              import_ex "GeneratorsY`y'.xls"
+ 10.                 else if inrange(`y', 2011, 2012) import_ex "GeneratorY`y'.xlsx" `st_two'
+ 11.                 else                             import_ex "3_1_Generator_Y`y'.xlsx" `st_two'
+ 12.         }       
+ 13.         qui {
+ 14.                 standardize_id_variables
+ 15.                 
+.                 *Define names to change to here.
+.                 local nameplate nameplate_capacity
+ 16.                 local summer summer_capacity
+ 17.                 local winter winter_capacity
+ 18.                 
+.                 capture rename nameplate `nameplate'
+ 19.                 capture rename nameplatecapacitymw `nameplate'
+ 20.                 capture rename summcap `summer'
+ 21.                 capture rename wintcap `winter'
+ 22.                 capture rename summercapacity `summer'
+ 23.                 capture rename wintercapacity `winter'
+ 24.                 capture rename summercapability `summer'
+ 25.                 capture rename wintercapability `winter'
+ 26.                 capture rename wind turbine_num
+ 27.                 capture rename windturbine turbine_num
+ 28.                 capture rename turbines turbine_num
+ 29.                 
+.                 capture rename owner ownership
+ 30.                 capture rename deliverpowertransgrid        deliver_power_transgrid
+ 31.                 capture rename deliverpowertotransmissiongr deliver_power_transgrid
+ 32.                 capture rename (insvmonth insvyear) (operatingmonth operatingyear)
+ 33.                 
+.                 *Keep only Wind
+.                 keep if inlist(primemover, "WT", "WS")
+ 34.                 gen year = `y'
+ 35.                 
+.                 local destring_vars nameplate_capacity summer_capacity winter_capacity ///
+>                                                         operatingmonth operatingyear year facilityid turbine_num
+ 36.                 destring `destring_vars', replace
+ 37.                 
+.                 if inrange(`y', 2004, 2012) keep `destring_vars' genid ownership deliver_power_transgrid
+ 38.                 else keep `destring_vars' genid ownership
+ 39.                 
+.                 
+.                 
+.                 tempfile geni`y'
+ 40.                 qui save "`geni`y''"
+ 41.         }
+ 42. }
+(38 vars, 16,801 obs)
+(38 vars, 17,366 obs)
+
+. clear 
+
+. forval y = 2002 / 2015 {
+  2.         append using "`geni`y''"
+  3. }
+(note: variable genid was str4, now str5 to accommodate using data's values)
+(note: variable nameplate_capacity was float, now double to accommodate using data's values)
+(note: variable summer_capacity was float, now double to accommodate using data's values)
+(note: variable winter_capacity was float, now double to accommodate using data's values)
+
+. * Documentation indicate that IPP and 
+. 
+. label var ownership "S = single, J = joint"
+
+. 
+. duplicates drop
+
+Duplicates in terms of all variables
+
+(0 observations are duplicates)
+
+. tempfile gen_data
+
+. save "`gen_data'"
+file C:\Users\Rich\AppData\Local\Temp\ST_44f8_00001a.tmp saved
+
+. 
+. *****************************************
+. * WIND DATA (ONLY AVAILABLE 2013 - 2015)
+. *****************************************
+. /* NOTE: Wind Files have operatingmonth, operatingyear, and nameplate_capacity. These are
+>    the same variables as those in generatorid (I verified). Do not need to grab them here */
+. cd "$eia860"
+D:\Dropbox\projects\joe_aldy\1603\Data\public\eia\eia_860
+
+. forval y = 2013 / 2015 {
+  2.         import excel "eia860`y'\3_2_Wind_Y`y'.xlsx", sheet("Operable") cellrange(A2) firstrow clear
+  3.         qui {
+  4.                 standardize_id_variables
+  5.                 
+.                 local ren_vars manufacturer_eia model_eia design_windspeed_eia turb_height_eia windclass_eia
+  6.                 
+.                 rename (predominantturbinemanufacturer predominantturbinemodelnumber ///
+>                                 designwindspeedmph turbinehubheightfeet windqualityclass) (`ren_vars')
+  7.                 
+.                 *keep `ren_vars' facilityid genid 
+.                 gen year = `y'
+  8.                 destring design_windspeed_eia turb_height_eia windclass_eia , replace
+  9.                 tempfile wind`y'
+ 10.                 qui save "`wind`y''"
+ 11.         }
+ 12. }
+
+. clear
+
+. forval y = 2013 / 2015 {
+  2.         append using "`wind`y''"
+  3. }
+
+. replace design_windspeed_eia = . if design_windspeed_eia == 0 //unrealistic
+(12 real changes made, 12 to missing)
+
+. duplicates drop
+
+Duplicates in terms of all variables
+
+(0 observations are duplicates)
+
+. tempfile wind_data
+
+. save "`wind_data'"
+file C:\Users\Rich\AppData\Local\Temp\ST_44f8_00001e.tmp saved
+
+. 
+. * BRING ALL DATA-SOURCES TOGETHER
+. use "$repodir/temp/eia_plant_data", clear
+
+. merge m:1 operatorid using "`operators'", nogen keep (master matched)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                            96,402  
+    -----------------------------------------
+
+. merge 1:m facilityid year using "`gen_data'", keep (matched using) nogen
+(note: variable year was int, now float to accommodate using data's values)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                             8,373  
+    -----------------------------------------
+
+. merge 1:1 facilityid year genid using "`wind_data'", nogen
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                         5,266
+        from master                     5,266  
+        from using                          0  
+
+    matched                             3,107  
+    -----------------------------------------
+
+. 
+. order operatorid operatorname facilityid facilityname genid year
+
+. sort facilityid genid year
+
+. compress
+  variable year was float now int
+  variable operatorname was str50 now str40
+  variable facilityname was str45 now str40
+  (142,341 bytes saved)
+
+. 
+. gen operating_date = date(string(operatingyear) + string(operatingmonth), "YM")
+
+. bys facilityid (year): egen ope_date_min = min(operating_date)
+
+. bys facilityid (year): egen ope_date_max = max(operating_date)
+
+.  
+. format operating_date ope_date* %tdmonCCYY
+
+. 
+. gen ope_months_min = ope_date_min / 30
+
+. gen ope_months_max = ope_date_max / 30
+
+. 
+. * Create flag variable if facility is never in years with ISO variable data collection
+. bys facilityid: egen total_10_12 = total( inrange(year, 2010, 2012) )
+
+. gen not_in_iso_years = cond(total_10_12 == 0, 1, 0)
+
+. 
+. * Create flag variable if facility never in years that have balancing authority
+. bys facilityid: egen total_13_15 = total( inrange(year, 2013, 2015) )
+
+. gen not_in_ba_years = cond(total_13_15 == 0, 1, 0)
+
+. 
+. drop total_10_12 total_13_15
+
+. 
+. 
+. * Rich wants a weighted average of generators that deliver to powergrid
+. gen deliver_power_grid = cond(deliver_power_transgrid == "Y", 1, 0)
+
+. replace deliver_power_grid = . if deliver_power_transgrid == ""
+(3,545 real changes made, 3,545 to missing)
+
+. 
+. * Calculated Weighted Average by capacity
+. preserve
+
+.         collapse (mean) deliver_power_transgrid = deliver_power_grid [weight = nameplate_capacity], by(facilityid year)
+(analytic weights assumed)
+
+.         tempfile deliver_power
+
+.         save "`deliver_power'"
+file C:\Users\Rich\AppData\Local\Temp\ST_44f8_00001g.tmp saved
+
+. restore
+
+. **************************************************
+. * Collapse from Generator to Facility Level
+. **************************************************
+. /* Sort by facilityid ID and descending on nameplate. We want information associated with
+>    largest generators. For ties, sort on generatorID so that the sort is replicable */
+. gsort facilityid year -nameplate_capacity genid
+
+. 
+. collapse (sum) turbine_num nameplate_capacity summer_capacity winter_capacity ///
+>                  (firstnm) operatorid operatorname entity_type facilityname state isortocode in_iso_rto ///
+>                                    manufacturer_eia model_eia design_windspeed_eia windclass_eia ///
+>                                    turb_height_eia balancingauthority nercregion ///
+>                                    not_in_iso_years not_in_ba_years ///
+>                                    ope_date_min ope_date_max ope_months_min ope_months_max zip ///
+>                                    ownership regulatory_status sector_name sector_number latitude longitude, by(facilityid year)
+
+. 
+. merge 1:1 facilityid year using "`deliver_power'"
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                             6,984  (_merge==3)
+    -----------------------------------------
+
+. assert _merge == 3
+
+. drop _merge
+
+. 
+. rename (latitude longitude) (eia_lat eia_long)
+
+. 
+. * Treasury research 11 / 29 / 2015. FID 56790 Capacity needs to be changed
+. foreach v in nameplate summer winter {
+  2.         replace `v'_capacity = 100.8 if facilityid == 56790
+  3. }
+(7 real changes made)
+(7 real changes made)
+(7 real changes made)
+
+. 
+. label var nameplate_capacity "Nameplate capacity (MW)"
+
+. label var summer_capacity    "Summer Capacity (MW)"
+
+. label var winter_capacity    "Winter Capacity (MW)"
+
+. 
+. * Clarify Entity Type
+. replace entity_type = "Cooperative"                             if entity_type == "C"
+variable entity_type was str3 now str11
+(123 real changes made)
+
+. replace entity_type = "Investor-Owned Utility"      if entity_type == "I"
+variable entity_type was str11 now str22
+(1,294 real changes made)
+
+. replace entity_type = "Independent Power Producer"      if entity_type == "Q"
+variable entity_type was str22 now str26
+(4,220 real changes made)
+
+. replace entity_type = "Municipally-Owned Utility"       if entity_type == "M"
+(181 real changes made)
+
+. replace entity_type = "Political Subdivision"           if entity_type == "P"
+(100 real changes made)
+
+. replace entity_type = "Federally-Owned Utility"         if entity_type == "F"
+(17 real changes made)
+
+. replace entity_type = "State-Owned Utility"             if entity_type == "S"
+(49 real changes made)
+
+. replace entity_type = "Industrial"                                      if entity_type == "IND"
+(51 real changes made)
+
+. replace entity_type = "Commercial"                                      if entity_type == "COM"
+(393 real changes made)
+
+. 
+. replace manufacturer_eia = lower(manufacturer_eia)
+(2,605 real changes made)
+
+. replace model_eia = lower(model_eia)
+(2,297 real changes made)
+
+. 
+. 
+. compress
+  variable not_in_iso_years was float now byte
+  variable not_in_ba_years was float now byte
+  variable ope_date_min was float now int
+  variable ope_date_max was float now int
+  variable turbine_num was double now int
+  (111,744 bytes saved)
+
+. order operatorid operatorname facilityid facilityname year
+
+. sort  facilityid year
+
+. save "$repodir/temp/EIA_860.dta", replace
+(note: file D:\GitDir\Projects\ags_capital_vs_output/temp/EIA_860.dta not found)
+file D:\GitDir\Projects\ags_capital_vs_output/temp/EIA_860.dta saved
+
+. ********************************************************************************
+. *                                                       EIA 923 DATA
+. ********************************************************************************
+. cd "$eia923"
+D:\Dropbox\projects\joe_aldy\1603\Data\public\eia\eia_923
+
+. 
+. * PROGRAM TO RETURN EIA YEAR DIRECTORY. ASSUMES EACH YEAR HAS ITS OWN FOLDER
+. * KEEPS SAME NAMING CONVENTION AS EIA DOWNLOAD
+. capture program drop get_923_direc
+
+. program define get_923_direc, rclass
+  1.         args year
+  2.         if inrange(`year', 2002, 2007) local ddir "f906920_`year'"
+  3.         else                           local ddir "f923_`year'"
+  4.         return local ddir "`ddir'"
+  5. end
+
+. 
+. ********************************************
+. *SCHEDULE 2 - 5  - MONTHLY PRODUCTION DATA
+. ********************************************
+. /* FOLLOWING LOOP:
+>  y = 2002/ 2015 - pull in year y
+>  y = 2016 - pull in old 2014 data with two facilities that were dropped in original 2014 data
+> */
+. forval y = 2002 / 2016 {
+  2.         
+.         if `y' == 2016 {
+  3.                 import excel "EIA923_Schedules_2_3_4_5_2014_OLD.xlsx", ///
+>                 sheet("Page 1 Generation and Fuel Data") cellrange(A6:CS12179) firstrow clear
+  4.         }
+  5.         
+.         else {
+  6.                 if `y' < 2011 { 
+  7.                         local st_row cellrange(A8)
+  8.         
+.                         if `y' == 2002                   local file_s "f906920y2002.xls"
+  9.                         else if inrange(`y', 2003, 2007) local file_s "f906920_`y'.xls"
+ 10.                         else if `y' == 2008              local file_s "eia923December2008.xls"
+ 11.                         else if `y' == 2009              local file_s "EIA923 SCHEDULES 2_3_4_5 M Final 2009 REVISED 05252011.XLS"
+ 12.                         else                             local file_s "EIA923 SCHEDULES 2_3_4_5 Final 2010.xls"
+ 13.         }
+ 14.                 else { //2012 - 2015
+ 15.                         local st_row cellrange(A6)
+ 16.                 
+.                         if (`y' == 2011 | `y' == 2013) local file_s "EIA923_Schedules_2_3_4_5_`y'_Final_Revision.xlsx"
+ 17.                         else                           local file_s "EIA923_Schedules_2_3_4_5_M_12_`y'_Final_Revision.xlsx"
+ 18.                 }
+ 19.         
+.                 get_923_direc `y' //Grab directory based on year
+ 20.                 import excel "`r(ddir)'/`file_s'", sheet("Page 1 Generation and Fuel Data") firstrow `st_row' clear
+ 21.         }
+ 22.         
+.         qui {
+ 23.                 standardize_id_variables
+ 24.                 rename netgenerationmegawatthours annual_netgen
+ 25.                 
+.                 if `y' == 2016 {
+ 26.                         keep if inlist(facilityid, 56414, 56415)
+ 27.                 }
+ 28.                 
+.                 * Keep Only Wind & Drop Imputed Aggregate ID (all under 99999)
+.                 qui keep if reportedfueltype == "WND" & facilityid != 99999
+ 29.                 keep facilityid year netgen* annual_netgen
+ 30.                 qui destring netgen* annual_netgen, replace
+ 31.                 *2012, 2014, 2015 change month name to abbrev. Ex: netgenjanuary -> netgenjan 
+.                 if inlist(`y', 2012, 2014, 2015, 2016) renvars netgen*, trim(9)
+ 32. 
+.                 tempfile gen_923_`y'
+ 33.                 save "`gen_923_`y''"
+ 34.         }
+ 35. }
+
+. clear
+
+. forval y = 2002 / 2016 {
+  2.         append using "`gen_923_`y''"
+  3. }
+
+. * Make sure no dups by Facilityid - Year to prepare for reshape
+. duplicates drop
+
+Duplicates in terms of all variables
+
+(0 observations are duplicates)
+
+. duplicates tag facilityid year, gen(dup)
+
+Duplicates in terms of facilityid year
+
+. assert dup == 0 
+
+. drop dup
+
+. 
+. * RESHAPE WIDE TO LONG. OBS LEVEL BECOMES FACILITYID - YEAR - MONTH
+. reshape long netgen, i(facilityid year) j(month, string)
+(note: j = apr aug dec feb jan jul jun mar may nov oct sep)
+
+Data                               wide   ->   long
+-----------------------------------------------------------------------------
+Number of obs.                     6861   ->   82332
+Number of variables                  15   ->       5
+j variable (12 values)                    ->   month
+xij variables:
+      netgenapr netgenaug ... netgensep   ->   netgen
+-----------------------------------------------------------------------------
+
+. *Change Month to str. ex. "jan" -> 1
+. gen mon = 0
+
+. local months_abbrev jan feb mar apr may jun jul aug sep oct nov dec
+
+. forval y = 1 / 12 {
+  2.         local abbrev: word `y' of `months_abbrev'
+  3.         qui replace mon = `y' if month == "`abbrev'"
+  4. }
+
+. drop month
+
+. rename mon month
+
+. duplicates drop
+
+Duplicates in terms of all variables
+
+(0 observations are duplicates)
+
+. 
+. tempfile schedule_2_5
+
+. save "`schedule_2_5'"
+file C:\Users\Rich\AppData\Local\Temp\ST_44f8_00001w.tmp saved
+
+. 
+. *************************************************
+. * SCHEDULE 6 - 7 - ANNUAL GENERATION AND SALES
+. *************************************************
+. forval y = 2004 / 2015 {
+  2.         di "`y'"
+  3.         if `y' < 2011 {
+  4.                 local row_start cellrange(A9)
+  5.                 if inrange(`y',2004, 2010) & `y' != 2008 local file_s "`y' Nonutility Source and Disposition.xls"
+  6.                 else if `y' == 2008                      local file_s "2008 Nonutility Source and Disposition Final version.xlsm"
+  7.         }
+  8.         else {
+  9.                 local row_start cellrange(A5)
+ 10.                 if `y' == 2013 local file_s "EIA923_Schedules_6_7_NU_SourceNDisposition_2013_Final.xlsx"
+ 11.                 else           local file_s "EIA923_Schedules_6_7_NU_SourceNDisposition_`y'_Final_Revision.xlsx"
+ 12.         }
+ 13.         get_923_direc `y' //grab directory based on year
+ 14.         import_ex "`r(ddir)'/`file_s'" `row_start'
+ 15.         qui {
+ 16.                 standardize_id_variables
+ 17.                 
+.                 *Revenue from Resale appears after 2011
+.                 local keepvars facilityid year grossgeneration retailsales salesforresale totaldisposition
+ 18.                 if `y' < 2011 keep `keepvars'
+ 19.                 else {
+ 20.                         capture rename revenuefromresalethousanddo revenuefromresale
+ 21.                         destring revenuefromresale, replace
+ 22.                         keep `keepvars' revenuefromresale
+ 23.                 }
+ 24.                 destring grossgeneration retailsales salesforresale totaldisposition, replace
+ 25.                 tempfile schedule_6_`y'
+ 26.                 qui save "`schedule_6_`y''"
+ 27.         }
+ 28. }
+2004
+2005
+2006
+2007
+2008
+2009
+2010
+2011
+2012
+2013
+2014
+2015
+
+. clear
+
+. forval y = 2004 / 2015 {
+  2.         append using "`schedule_6_`y''"
+  3. }
+
+. * DEAL WITH DUPLICATES
+. duplicates drop
+
+Duplicates in terms of all variables
+
+(24 observations deleted)
+
+. 
+. * These two facilties have all zeroes for one of the obs in 2006. Keep row with data
+. drop if facilityid == 10294 & year == 2006 & retailsales == 0
+(1 observation deleted)
+
+. drop if facilityid == 55396 & year == 2006 & grossgen == 0
+(1 observation deleted)
+
+. 
+. *These two facilitises have duplicates but are not wind farms, so can drop
+. drop if facilityid == 10523 
+(12 observations deleted)
+
+. drop if facilityid == 55592 
+(13 observations deleted)
+
+. 
+. merge 1:m facilityid year using "`schedule_2_5'"
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                        47,552
+        from master                    32,912  (_merge==1)
+        from using                     14,640  (_merge==2)
+
+    matched                            67,692  (_merge==3)
+    -----------------------------------------
+
+. order facilityid year month
+
+. sort facilityid year month
+
+. compress
+  variable month was float now byte
+  (345,732 bytes saved)
+
+. keep if _merge != 1 //only interested if it has production data
+(32,912 observations deleted)
+
+. drop _merge
+
+. rename grossgeneration annual_grossgen
+
+. 
+. label var retailsales       "Electricity Sold (MWH) to Retail Customers"
+
+. label var salesforresale    "Electricity Sold(MWH) wholesale"
+
+. label var revenuefromresale "$(Thousand dollars from wholesale"
+
+. label var annual_grossgen   "Total Annual Gross Gen (MWH)"
+
+. label var annual_netgen     "Total Annual Net Gen (MWH)"
+
+. label var totaldisposition "Total Outgoing Elec (MWH)"
+
+. 
+. save "$repodir/temp/EIA_923.dta", replace
+(note: file D:\GitDir\Projects\ags_capital_vs_output/temp/EIA_923.dta not found)
+file D:\GitDir\Projects\ags_capital_vs_output/temp/EIA_923.dta saved
+
+. ********************************************************************************
+. *                       CLEAN EIA 861M (Formerly 826) - SALES REVENUE BY STATE DATA-SET
+. ********************************************************************************
+. import excel "$eia\eia_861M\sales_revenue.xlsx", clear
+
+. 
+. *Data file has four sections: industrial, transportation, other, total 
+. local rename_vars year month state data_status
+
+. *Add the four sections for rename
+. foreach pre in res com ind trans oth tot {
+  2.         foreach t in rev sales customers price {
+  3.                 local rename_vars `rename_vars' `pre'_`t'
+  4.         }
+  5. }
+
+. di "`rename_vars'"
+year month state data_status res_rev res_sales res_customers res_price com_rev com_sales com_customers com_price ind_rev ind_sales ind_c
+> ustomers ind_price trans_rev trans_sales trans_customers trans_price oth_rev oth_sales oth_customers oth_price tot_rev tot_sales tot_c
+> ustomers tot_price
+
+. rename (_all) (`rename_vars')
+
+. 
+. drop in 1/3
+(3 observations deleted)
+
+. drop if regexm(year, "The sector")
+(1 observation deleted)
+
+. destring year tot_price month, replace
+year: all characters numeric; replaced as int
+tot_price: all characters numeric; replaced as double
+month: all characters numeric; replaced as byte
+
+. keep if inrange(year, 2002, 2015)
+(8,058 observations deleted)
+
+. keep year month state tot_price
+
+. 
+. *la var res_price "Residential Price (EIA826) in Cents/kWh"
+. *la var com_price "Commercial Price (EIA826) in Cents/kWh"
+. *la var ind_price "Industrial Price (EIA826) in Cents/kWh"
+. *la var oth_price "Other Price (EIA826) in Cents/kWh"
+. la var tot_price "Avg Retail Elec. Price (EIA861M) in Cents/kWh for state"
+
+. rename tot_price state_avg_price
+
+. 
+. compress
+  variable state was str5 now str2
+  (25,704 bytes saved)
+
+. save "$generated_data/EIA_826.dta", replace
+(note: file D:/Dropbox/projects/joe_aldy/1603/generated_data/EIA_826.dta not found)
+file D:/Dropbox/projects/joe_aldy/1603/generated_data/EIA_826.dta saved
+
+. *************************** COMBINE EIA DATASETS *******************************
+. use "$repodir/temp/EIA_860.dta", clear
+
+. merge 1:m facilityid year using "$repodir/temp/EIA_923.dta", nogen keep(matched)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                            81,828  
+    -----------------------------------------
+
+. 
+. sort facilityid year month
+
+. 
+. * Produce EIA dynamic data-set with changing information
+. local static_variables facilityname state ope_date_min ope_date_max ///
+>                            ope_months_min ope_months_max zip design_windspeed_eia turb_height_eia ///
+>                                manufacturer_eia model_eia isortocode in_iso_rto balancingauthority nercregion ///
+>                                not_in_iso_years not_in_ba_years windclass_eia entity_type eia_lat eia_long
+
+.                  
+. preserve
+
+.         drop `static_variables'
+
+.         save "$generated_data/eia_dynamic.dta", replace
+(note: file D:/Dropbox/projects/joe_aldy/1603/generated_data/eia_dynamic.dta not found)
+file D:/Dropbox/projects/joe_aldy/1603/generated_data/eia_dynamic.dta saved
+
+. restore
+
+. 
+. * PRODUCE STATIC DATA-SET       
+. keep facilityid year `static_variables'
+
+. 
+. /* GOING TO TAKE MODE OF EIA MANUFACTURER AND EIA MODEL
+> 
+>         MODE CODE WILL FAIL IF THERE IS NO MODE
+>         TWO ISSUES:
+>                 - DIFFERENT SPELLINGS (NEED TO STANDARDIZE)
+>                 - DIFFERENT TURBINES LISTED
+>                         -GOOGLE SEARCHED WHICH WAS CORRECT
+> */
+. 
+. qui {
+
+. * GENERATE MODE FOR FACILTIY AND MODEL
+. foreach var in manufacturer_eia model_eia {
+  2.         bys facilityid: egen `var'_mode = mode(`var')
+  3.         *There should be no obs with mode missing if variable is present
+.         qui count if `var' != "" & `var'_mode == ""
+  4.         assert `r(N)' == 0
+  5. }
+Warning: at least one group contains all missing values or contains multiple modes.  Generating missing values for the mode of these
+groups.  Use the missing, maxmode, minmode, or nummode() options to control this behavior.
+(1452 missing values generated)
+Warning: at least one group contains all missing values or contains multiple modes.  Generating missing values for the mode of these
+groups.  Use the missing, maxmode, minmode, or nummode() options to control this behavior.
+(1452 missing values generated)
+
+. drop manufacturer_eia model_eia swap_flag
+
+. rename (manufacturer_eia_mode model_eia_mode) (manufacturer_eia model_eia)
+
+. 
+. 
+. /* ALL OTHER STATIC_VARIABLES:
+>         TAKE 2014 VALUE UNLESS MISSING OTHERWISE TAKE LAST NON-MISSING
+> */
+. gen is14 = cond(year == 2014, 1, 0)
+
+. foreach var in `static_variables' {
+  2.         qui gen `var'_2014_value = `var' if is14
+  3. }
+
+. collapse (lastnm) `static_variables' (firstnm) *_2014_value, by(facilityid)
+
+. 
+. *Replace with last non-missing if missing 2014 value
+. foreach var in `static_variables'{
+  2.         capture replace `var'_2014_value = `var' if `var'_2014_value == .
+  3.         capture replace `var'_2014_value = `var' if `var'_2014_value == ""
+  4.         
+.         drop `var'
+  5.         rename `var'_2014_value `var'
+  6.         label var `var' ""
+  7. }
+
+. 
+. label var ope_date_min     "Earliest date of start of commercial operation (EIA 860)"
+
+. label var ope_date_max     "Lastest date of start of commercial operation (EIA 860)"
+
+. label var ope_months_min   "Min # of months in operation since 1/1/1960"
+
+. label var ope_months_max   "Max # of months in operation since 1/1/1960"
+
+. 
+. label var state "State where Facility resides"
+
+. label var zip   "Zipcode of Facility"
+
+. 
+. label var in_iso_rto           "Binary variable whether in an ISO/RTO"
+
+. label var isortocode           "Indicates RTO/ISO of territory where plant resides"
+
+. label var balancingauthority   "BA manages supply and demand of elec in an area"
+
+. label var nercregion           "Nerc Region plant is located in"
+
+. 
+. label var not_in_iso_years " = 1 if no obs in years of EIA with ISO info (2010-2012)"
+
+. label var not_in_ba_years " = 1 if no obs in years of EIA with Balancing Authority Data (2013-2015)"
+
+. compress
+  variable ope_date_min was float now int
+  variable ope_date_max was float now int
+  variable in_iso_rto was float now byte
+  variable not_in_iso_years was float now byte
+  variable not_in_ba_years was float now byte
+  variable windclass_eia was float now byte
+  (15,344 bytes saved)
+
+. save "$generated_data/eia_static.dta", replace
+(note: file D:/Dropbox/projects/joe_aldy/1603/generated_data/eia_static.dta not found)
+file D:/Dropbox/projects/joe_aldy/1603/generated_data/eia_static.dta saved
+
+. ********************************************************************************
+. tempsetup
+D:\GitDir\Projects\ags_capital_vs_output\temp
+
+. capture log close
