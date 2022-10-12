@@ -1,0 +1,38 @@
+{
+\def\sym#1{\ifmmode^{#1}\else\(^{#1}\)\fi}
+\begin{tabular}{l*{6}{c}}
+\toprule
+                &\multicolumn{1}{c}{(1)}         &\multicolumn{1}{c}{(2)}         &\multicolumn{1}{c}{(3)}         &\multicolumn{1}{c}{(4)}         &\multicolumn{1}{c}{(5)}         &\multicolumn{1}{c}{(6)}         \\
+\midrule
+1603 Grant      &   -0.174\sym{***}&   -0.121\sym{***}&  -0.0939\sym{***}&   -0.129\sym{***}&   -0.108\sym{**} &   -0.107\sym{***}\\
+                & (0.0332)         & (0.0318)         & (0.0283)         & (0.0486)         & (0.0426)         & (0.0387)         \\
+\addlinespace
+log(Capacity)   &    0.991\sym{***}&    0.987\sym{***}&    1.020\sym{***}&    0.988\sym{***}&    0.986\sym{***}&    1.020\sym{***}\\
+                & (0.0112)         & (0.0148)         & (0.0159)         & (0.0119)         & (0.0148)         & (0.0158)         \\
+\addlinespace
+Regulated       &                  &  -0.0890         &   -0.199\sym{***}&                  &  -0.0856         &   -0.199\sym{***}\\
+                &                  & (0.0586)         & (0.0611)         &                  & (0.0578)         & (0.0609)         \\
+\addlinespace
+PPA             &                  &  -0.0427         &  -0.0995\sym{***}&                  &  -0.0419         &  -0.0999\sym{***}\\
+                &                  & (0.0369)         & (0.0286)         &                  & (0.0368)         & (0.0284)         \\
+\addlinespace
+IPP             &                  &  -0.0797\sym{*}  &  -0.0991\sym{**} &                  &  -0.0807\sym{*}  &  -0.0974\sym{**} \\
+                &                  & (0.0462)         & (0.0433)         &                  & (0.0455)         & (0.0425)         \\
+\addlinespace
+Potential Capacity Factor&                  &   0.0172\sym{***}&   0.0189\sym{***}&                  &   0.0172\sym{***}&   0.0190\sym{***}\\
+                &                  &(0.00117)         &(0.00131)         &                  &(0.00117)         &(0.00128)         \\
+\addlinespace
+Var(Wind Speed) &                  &  0.00470         &  -0.0121\sym{***}&                  &  0.00512         &  -0.0123\sym{***}\\
+                &                  &(0.00475)         &(0.00312)         &                  &(0.00498)         &(0.00321)         \\
+\addlinespace
+log(Capacity)   &                  &        0         &        0         &                  &                  &                  \\
+                &                  &      (.)         &      (.)         &                  &                  &                  \\
+\midrule
+Regression Type &      OLS         &      OLS         &      OLS         &     2SLS         &     2SLS         &     2SLS         \\
+Controls        &        N         &        Y         &        Y         &        N         &        Y         &        Y         \\
+State FE        &        N         &        N         &        Y         &        N         &        N         &        Y         \\
+N               &     8752         &     8752         &     8752         &     8752         &     8752         &     8752         \\
+First-stage F-stat.&                  &                  &                  &      143         &      169         &      113         \\
+\bottomrule
+\end{tabular}
+}

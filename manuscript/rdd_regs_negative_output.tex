@@ -1,0 +1,16 @@
+{
+\def\sym#1{\ifmmode^{#1}\else\(^{#1}\)\fi}
+\begin{tabular}{l*{6}{c}}
+\toprule
+                &\multicolumn{1}{c}{(1)}         &\multicolumn{1}{c}{(2)}         &\multicolumn{1}{c}{(3)}         &\multicolumn{1}{c}{(4)}         &\multicolumn{1}{c}{(5)}         &\multicolumn{1}{c}{(6)}         \\
+\midrule
+1603 Grant      &   -4.186\sym{***}&   -2.034         &   -3.136\sym{**} &   -3.589\sym{***}&   -0.866         &   -2.235\sym{**} \\
+                &  (1.477)         &  (1.575)         &  (1.498)         &  (1.066)         &  (1.077)         &  (0.998)         \\
+\midrule
+Output Adjustment&     none         &full potential         &predicted         &     none         &full potential         &predicted         \\
+State FE        &                  &                  &                  &        Y         &        Y         &        Y         \\
+N               &     4800         &     4800         &     4800         &     4800         &     4800         &     4800         \\
+First-stage F-stat.&      171         &      171         &      171         &      172         &      172         &      172         \\
+\bottomrule
+\end{tabular}
+}

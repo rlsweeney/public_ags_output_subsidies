@@ -1,0 +1,424 @@
+----------------------------------------------------------------------------------------
+      name:  <unnamed>
+       log:  C:\GitDir\Projects\ags_capital_vs_output/output/logs/matching.txt
+  log type:  text
+ opened on:  14 Jul 2022, 09:36:21
+
+. ********************************************************************************
+. 
+. /********************************************************************************
+> * PREP DATA 
+> - GET FACILITY LEVEL INFO TO MATCH ON
+> - SINCE WE ARE GOING TO BE DIFFERENCING ON JUST THE POST PERIOD, 
+> RESTRICT PRE-PERIOD ENTRANTS TO POST PERIOD N
+> *********************************************************************************/
+. 
+. set seed 12345
+
+. use $repodir/generated_data/panel_reg_data, clear
+
+. clonevar date = ymdate
+
+. rename log_nameplate log_cap
+
+. keep if firstyear > 2004
+(29,939 observations deleted)
+
+. 
+. *RESTRICT TO YEARS WITH BOTH TYPES
+. drop if year < 2009 // 2013 FOR BALANCED PANEL
+(3,429 observations deleted)
+
+. save indata, replace
+(note: file indata.dta not found)
+file indata.dta saved
+
+. 
+. 
+. use indata, clear
+
+. drop if year < 2013 // restrict to same years for accurate comparison of earlier plant
+> s
+(18,068 observations deleted)
+
+. local meanvars ptnl_cf_adj wind_speed* nameplate turbsize capacity_factor log_cap wind
+> var
+
+. collapse (mean) `meanvars' (min) min_reg_dummy = reg_dummy ///
+>         (lastnm) ppa_dummy entnum windclass_eia, by(facilityid)
+
+. merge 1:1 facilityid using $repodir/generated_data/static_reg_data, nogen keep(match) 
+(label pcurve_match already defined)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                               669  
+    -----------------------------------------
+
+. 
+. foreach v of varlist `meanvars' {
+  2.         rename `v' avg_`v'
+  3. }
+
+. 
+. xi i.entnum, prefix(_D) noomit
+
+.         
+. keep if insample 
+(153 observations deleted)
+
+. keep if insample_covars
+(51 observations deleted)
+
+. gen turbinesize = powercurve_max_cap/1000
+
+. save cemdat, replace
+(note: file cemdat.dta not found)
+file cemdat.dta saved
+
+. 
+. ***GET PANEL DATA TO MERGE TO
+. use indata, clear
+
+. drop if age < 12 // drop first year of production
+(5,871 observations deleted)
+
+. xi i.firstyear i.state  i.windclass_eia i.date i.nercnum i.year i.month i.off_cat_num 
+> ///
+>         i.ott i.iso_rto_code i.entnum i.turbnum , prefix(_D) noomit
+
+. save regdat, replace
+(note: file regdat.dta not found)
+file regdat.dta saved
+
+. 
+. ********************************************************************************
+. *CEM SETUP
+. ********************************************************************************
+. *SET VARS THAT WILL BE MATCHED IN ALL SPECS REGARDLESS OF REGION
+. *preferred
+. local capvar avg_nameplate (10)
+
+. local windvars design_windspeed_eia windclass_eia (#0)
+
+. global match_vars min_reg_dummy (#0) entnum (#0) `capvar' `windvars' 
+
+. 
+. *SET COVARS IN EVERY REGRESSION 
+. global did_vars _Df* _Ddat* 
+
+. 
+. *SET ADDITIONAL COVARS TO DIFFERENCE EACH PERIOD IN SPEC WITH COVARS
+. global reg_covars reg_dummy ppa_dummy ipp_dummy ptnl_cf_adj windvar log_cap
+
+. 
+. global kflag // k2k restricts to 1-1 match (drops randomly though)
+
+. global wlab 1 
+
+. 
+. ********************************************************************************
+. * PROGRAMS
+. ********************************************************************************
+. *GET CEM MATCHES AND CREATE REGRESSION DATA
+. capture program drop run_cem
+
+. program define run_cem
+  1. 
+.         cem $cemspec, treatment(policy) $kflag
+  2.         keep facilityid cem_* policy  flag_1603
+  3.         save mdat, replace
+  4.         tab cem_match policy
+  5. 
+.         use mdat, clear
+  6.         keep if cem_match == 1
+  7.         merge 1:m facilityid using regdat, keep(match) nogen
+  8. 
+.         replace cem_weights = $wlab
+  9.         capture drop tg
+ 10. end
+
+. 
+. capture program drop getNobs
+
+. program define getNobs
+  1. 
+.         use mdat, clear
+  2.         keep if cem_match == 1
+  3.         tab policy flag_1603, matcell(x)
+  4.         mat list x
+  5.         local Npre = x[1,1]
+  6.         local Nptc = x[2,1]
+  7.         local N1603 = x[2,2]
+  8. 
+. 
+.         estadd local Npre `Npre', replace
+  9.         estadd local Nptc `Nptc', replace
+ 10.         estadd local N1603 `N1603', replace
+ 11. end
+
+. 
+. 
+. ********************************************************************************
+. * RUN MANY SPECIFICATION WITH A SINGLE REGION DEFINITION
+. ********************************************************************************
+. eststo clear 
+
+. 
+. qui{
+
+. esttab , keep(*1603)    ///
+>         s(rsamp FEs r2_a N, ///
+>                 label("Sample" "FEs" "R-sq." "N")) ///
+>         nomtitles se noconstant label star(* 0.10 ** 0.05 *** 0.01)
+
+----------------------------------------------------------------------------------------
+> ------------
+                              (1)             (2)             (3)             (4)       
+>       (5)   
+----------------------------------------------------------------------------------------
+> ------------
+1603 Grant                 -2.942***       -3.975***       -3.862***       -3.716***    
+>    -3.633***
+                          (0.719)         (1.063)         (1.019)         (1.033)       
+>   (1.159)   
+----------------------------------------------------------------------------------------
+> ------------
+Sample                        All         Matched         Matched         Matched       
+>   Matched   
+FEs                         State           State           Group         Group*Y       
+> Group*Y*M   
+R-sq.                       0.615           0.623           0.632           0.642       
+>     0.762   
+N                           21303           10106           10106           10106       
+>     10106   
+----------------------------------------------------------------------------------------
+> ------------
+Standard errors in parentheses
+* p<0.10, ** p<0.05, *** p<0.01
+
+. 
+. esttab using "$outdir/tables/exact_match_state.tex", ///
+>         se noconstant label star(* 0.10 ** 0.05 *** 0.01) replace  ///
+>         keep(*1603) ///
+>         s(rsamp FEs r2_a N, ///
+>                 label("Sample" "FEs" "R-sq." "N")) ///
+>         nomtitles booktabs nonotes
+(output written to C:\GitDir\Projects\ags_capital_vs_output/output/tables/exact_match_st
+> ate.tex)
+
+.         
+. esttab m1 m2 m3 m4 m6 using "$outdir/tables/exact_match_state_prez.tex", ///
+>         se noconstant label star(* 0.10 ** 0.05 *** 0.01) replace  ///
+>         keep(*1603) ///
+>         s(rsamp FEs r2_a N, ///
+>                 label("Sample" "FEs" "Controls" "R-sq." "N")) ///
+>         nomtitles booktabs nonotes
+(output written to C:\GitDir\Projects\ags_capital_vs_output/output/tables/exact_match_st
+> ate_prez.tex)
+
+. 
+. ********************************************************************************
+. * RUN WITH GROUP FE'S FOR MANY SPECS
+. ********************************************************************************
+. 
+. eststo clear 
+
+. global tgroups cem_strata year
+
+. qui{
+
+. 
+. esttab , keep(*1603)    ///
+>         s(Npre Nptc N1603 region r2_a N, ///
+>                 label("\# Pre-PTC" "\# Post-PTC" "\# Post-1603" "Region" "R-sq." "N"))
+>  ///
+>         se noconstant nomtitles label star(* 0.10 ** 0.05 *** 0.01)
+
+------------------------------------------------------------------------------------
+                              (1)             (2)             (3)             (4)   
+------------------------------------------------------------------------------------
+1603 Grant                 -2.989***       -3.362***       -3.472***       -3.716***
+                          (0.918)         (0.961)         (1.032)         (1.033)   
+------------------------------------------------------------------------------------
+\# Pre-PTC                    108             100              90              86   
+\# Post-PTC                    54              51              44              35   
+\# Post-1603                  116              87              78              83   
+Region                Nerc-1(ISO)             ISO        Nerc*ISO           State   
+R-sq.                       0.634           0.677           0.661           0.642   
+N                           13439           11724           10577           10106   
+------------------------------------------------------------------------------------
+Standard errors in parentheses
+* p<0.10, ** p<0.05, *** p<0.01
+
+. 
+. di "$did_vars"
+_Df* _Ddat*
+
+. di "$reg_covars"        
+reg_dummy ppa_dummy ipp_dummy ptnl_cf_adj windvar log_cap
+
+. 
+. esttab using "$outdir/tables/exact_match_wide_table.tex", ///
+>         se noconstant label star(* 0.10 ** 0.05 *** 0.01) replace  ///
+>         keep(*1603) ///
+>         s(Npre Nptc N1603 region r2_a N, ///
+>                 label("\# Pre-PTC" "\# Post-PTC" "\# Post-1603" "Region" "R-sq." "N"))
+>  ///
+>         nomtitles booktabs nonotes
+(output written to C:\GitDir\Projects\ags_capital_vs_output/output/tables/exact_match_wi
+> de_table.tex)
+
+. 
+. ********************************************************************************
+. *SHOW BALANCE
+. ********************************************************************************
+. 
+. quietly{
+
+. frmttable using "$outdir/tables/matching_balance.tex", statmat(T) varlabels replace //
+> /
+>         ctitle("", Pre, Post, Difference, "p-value") hlines(11{0}101) spacebef(1{0}10)
+>  frag tex ///
+>         sdec(2,2,2,2 \ 2,2,2,2 \ 2,2,2,2 \ 2,2,2,2 \ 2,2,2,2 \ 2,2,2,2 \ 2,2,2,2 \ 2,2
+> ,2,2 \ 0,0,0,0 \ 0,0,0,0) 
+
+           ------------------------------------------------------------------
+                                         Pre     Post   Difference  p-value 
+           ------------------------------------------------------------------
+            Nameplate Capacity (MW)     101.91  105.39     3.48      0.74   
+            Turbine Size (MW)            1.78    1.89      0.11      0.05   
+            Design Wind Speed (MPH)     17.92   17.46     -0.45      0.14   
+            Regulated                    0.09    0.09      0.00      1.00   
+            IPP                          0.89    0.89      0.00      1.00   
+            PPA                          0.82    0.77     -0.05      0.42   
+            Potential Capacity Factor   36.76   37.39      0.63      0.53   
+            Capacity Factor             34.01   32.80     -1.21      0.14   
+            Wind Farms                    86     118                        
+            1603 Recipients                       83                        
+           ------------------------------------------------------------------
+
+
+. 
+. 
+. ********************************************************************************
+. * ROBUSTNESS TO USE OF POTENTIAL CF INSTEAD OF WIND CLASS AND DESIGN WIND SPEED
+. ********************************************************************************
+. *SET VARS THAT WILL BE MATCHED IN ALL SPECS REGARDLESS OF REGION
+. *robustness using potential cf
+. local capvar avg_nameplate (10)
+
+. local windvars avg_ptnl_cf_adj
+
+. global match_vars min_reg_dummy (#0) entnum (#0) `capvar' `windvars' 
+
+. 
+. ********************************************************************************
+. * RUN MANY SPECIFICATION WITH A SINGLE REGION DEFINITION
+. ********************************************************************************
+. eststo clear 
+
+. 
+. qui{
+
+. esttab , keep(*1603)    ///
+>         s(rsamp FEs r2_a N, ///
+>                 label("Sample" "FEs" "R-sq." "N")) ///
+>         nomtitles se noconstant label star(* 0.10 ** 0.05 *** 0.01)
+
+----------------------------------------------------------------------------------------
+> ------------
+                              (1)             (2)             (3)             (4)       
+>       (5)   
+----------------------------------------------------------------------------------------
+> ------------
+1603 Grant                 -2.942***       -3.884***       -3.120***       -2.712**     
+>    -2.780** 
+                          (0.719)         (1.027)         (1.067)         (1.098)       
+>   (1.196)   
+----------------------------------------------------------------------------------------
+> ------------
+Sample                        All         Matched         Matched         Matched       
+>   Matched   
+FEs                         State           State           Group         Group*Y       
+> Group*Y*M   
+R-sq.                       0.615           0.633           0.655           0.669       
+>     0.789   
+N                           21303           12885           12885           12885       
+>     12885   
+----------------------------------------------------------------------------------------
+> ------------
+Standard errors in parentheses
+* p<0.10, ** p<0.05, *** p<0.01
+
+. 
+. esttab using "$outdir/tables/exact_match_state_ptnlcf.tex", ///
+>         se noconstant label star(* 0.10 ** 0.05 *** 0.01) replace  ///
+>         keep(*1603) ///
+>         s(rsamp FEs r2_a N, ///
+>                 label("Sample" "FEs" "R-sq." "N")) ///
+>         nomtitles booktabs nonotes
+(output written to C:\GitDir\Projects\ags_capital_vs_output/output/tables/exact_match_st
+> ate_ptnlcf.tex)
+
+.         
+. ********************************************************************************
+. * RUN WITH GROUP FE'S FOR MANY SPECS
+. ********************************************************************************
+. 
+. eststo clear 
+
+. global tgroups cem_strata year
+
+. qui{
+
+. 
+. esttab , keep(*1603)    ///
+>         s(Npre Nptc N1603 region r2_a N, ///
+>                 label("\# Pre-PTC" "\# Post-PTC" "\# Post-1603" "Region" "R-sq." "N"))
+>  ///
+>         se noconstant nomtitles label star(* 0.10 ** 0.05 *** 0.01)
+
+------------------------------------------------------------------------------------
+                              (1)             (2)             (3)             (4)   
+------------------------------------------------------------------------------------
+1603 Grant                 -1.933**        -1.692**        -1.178          -2.712** 
+                          (0.773)         (0.811)         (0.858)         (1.098)   
+------------------------------------------------------------------------------------
+\# Pre-PTC                    137             115             115             120   
+\# Post-PTC                    50              49              43              32   
+\# Post-1603                  128              98              90              95   
+Region                Nerc-1(ISO)             ISO        Nerc*ISO           State   
+R-sq.                       0.674           0.694           0.690           0.669   
+N                           15851           13195           12758           12885   
+------------------------------------------------------------------------------------
+Standard errors in parentheses
+* p<0.10, ** p<0.05, *** p<0.01
+
+. 
+. di "$did_vars"
+_Df* _Ddat*
+
+. di "$reg_covars"        
+reg_dummy ppa_dummy ipp_dummy ptnl_cf_adj windvar log_cap
+
+. 
+. esttab using "$outdir/tables/exact_match_wide_table_ptnlcf.tex", ///
+>         se noconstant label star(* 0.10 ** 0.05 *** 0.01) replace  ///
+>         keep(*1603) ///
+>         s(Npre Nptc N1603 region r2_a N, ///
+>                 label("\# Pre-PTC" "\# Post-PTC" "\# Post-1603" "Region" "R-sq." "N"))
+>  ///
+>         nomtitles booktabs nonotes
+(output written to C:\GitDir\Projects\ags_capital_vs_output/output/tables/exact_match_wi
+> de_table_ptnlcf.tex)
+
+. ********************************************************************************
+. tempsetup
+C:\GitDir\Projects\ags_capital_vs_output\temp
+
+. cd "$repodir" 
+C:\GitDir\Projects\ags_capital_vs_output
+
+. capture log close

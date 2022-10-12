@@ -1,0 +1,912 @@
+----------------------------------------------------------------------------------------
+      name:  <unnamed>
+       log:  C:\GitDir\Projects\ags_capital_vs_output/output/logs/summarize_negative_pri
+> ces.txt
+  log type:  text
+ opened on:  14 Jul 2022, 09:38:23
+
+. ********************************************************************************
+. 
+. /*******************************************************************************
+> BRING IN NODE DATA AND DEFINE SAMPLE
+> *from negative_lmp.do
+> *******************************************************************************/
+. clear
+
+. foreach iso in ercot miso neiso nyiso pjm caiso {
+  2.         append using "$repodir/generated_data/`iso'_negative_lmp.dta"
+  3. }
+(note: variable node_name was str12, now str14 to accommodate using data's values)
+(note: variable type was str9, now str12 to accommodate using data's values)
+(note: variable node_name was str14, now str26 to accommodate using data's values)
+(note: variable node_name was str26, now str31 to accommodate using data's values)
+
+. compress
+  variable month was float now byte
+  variable year was float now int
+  (4,694,150 bytes saved)
+
+. save all_iso_negative_lmp, replace
+(note: file all_iso_negative_lmp.dta not found)
+file all_iso_negative_lmp.dta saved
+
+. 
+. * GET NODE TYPE INFO AND LAT LONG DATA FROM SNL
+. *from match_nodes_to_lat_long.do
+. use "$generated_data/lmp_nodes_with_lat_long.dta", clear
+
+. drop if node_in_data == 2 // drop locations not found in LMP data
+(6,253 observations deleted)
+
+. 
+. tostring node_id, gen(my_node_id)
+my_node_id generated as str10
+
+. replace my_node_id = node_name if iso != "PJM"
+variable my_node_id was str10 now str31
+(12,198 real changes made)
+
+. replace my_node_id = subinstr(my_node_id," ","",.)
+(829 real changes made)
+
+. 
+. * CREATE A FLAG FOR GENERATION NODES
+. gen flag_gen_node = 1
+
+. drop gen_node ag_gen_node 
+
+. replace flag_gen_node = 0 if iso == "MISO" & type != "Gennode"
+(1,129 real changes made)
+
+. replace flag_gen_node = 0 if iso == "PJM" & type != "GEN"
+(10,887 real changes made)
+
+. replace flag_gen_node = 0 if iso == "NEISO" & type != "NETWORK NODE"
+(48 real changes made)
+
+. replace flag_gen_node = 0 if iso == "NYISO" & type != "Generator"
+(15 real changes made)
+
+. 
+. *PJM HAS A BUNCH OF REPEATED NODES
+. gsort iso node_name node_id -flag_gen_node
+
+. bys iso node_name node_id: gen te = _n
+
+. drop if te > 1
+(356 observations deleted)
+
+. drop te
+
+. 
+. gen flag_in_geodata = cond(lat==.,0,1)
+
+. rename lat node_lat 
+
+. rename long node_long
+
+. 
+. *drop two duplicates with leading zeros
+. sort my_node_id node_name
+
+. by my_node_id: gen te = _n
+
+. drop if te > 1
+(2 observations deleted)
+
+. 
+. rename state node_state
+
+. keep node_id node_name iso node_lat node_long my_node flag_* node_state
+
+. save "$generated_data/node_info.dta", replace
+file C:\GitDir\Projects\ags_capital_vs_output/generated_data/node_info.dta saved
+
+. 
+. * BRING IN MONTHLY FREQUENCIES BY NODE
+. use all_iso_negative_lmp, clear
+
+. *CREATE A STRING VARIABLE THAT IS NODEID IN PJM AND NODE NAME ELSEWHERE
+. tostring node_id, gen(my_node_id)
+my_node_id generated as str10
+
+. replace my_node_id = node_name if iso != "PJM" // NODE NAME NOT UNIQUE IN PJM
+variable my_node_id was str10 now str31
+(438,534 real changes made)
+
+. replace my_node_id = subinstr(my_node_id," ","",.)
+(34,694 real changes made)
+
+. 
+. drop type
+
+. merge m:1 my_node_id using "$generated_data/node_info.dta", nogen keep(match) 
+(note: variable node_name was str31, now str35 to accommodate using data's values)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                           938,830  
+    -----------------------------------------
+
+. tab iso flag_gen_node
+
+           |     flag_gen_node
+       iso |         0          1 |     Total
+-----------+----------------------+----------
+     CAISO |         0    244,877 |   244,877 
+     ERCOT |         0     26,892 |    26,892 
+      MISO |    31,673     59,740 |    91,413 
+     NEISO |     2,256     48,462 |    50,718 
+     NYISO |       720     23,914 |    24,634 
+       PJM |   409,989     90,307 |   500,296 
+-----------+----------------------+----------
+     Total |   444,638    494,192 |   938,830 
+
+. drop if year < 2011 | year > 2014 // these are available for each iso
+(0 observations deleted)
+
+. egen nodeobs = count(year), by(my_node_id iso)
+
+. 
+. rename fract_below_0 frac0
+
+. rename fract_below_23 frac23
+
+. gen frac_marginal = frac0 - frac23
+
+. 
+. foreach v of varlist frac0 frac23 frac_marginal {
+  2.         replace `v' = `v'*100
+  3. }
+(618,974 real changes made)
+(433,273 real changes made)
+(591,329 real changes made)
+
+. save mergeddata, replace
+(note: file mergeddata.dta not found)
+file mergeddata.dta saved
+
+. 
+. use mergeddata, clear
+
+. keep if nodeobs == 48 
+(176,590 observations deleted)
+
+. keep if flag_gen_node == 1 // SOME ISO's have many LMP nodes 
+(340,944 observations deleted)
+
+. sort my_node_id year month
+
+. by my_node: gen flag_firstob = _n
+
+. replace flag_firstob = 0 if flag_firstob > 1
+(412,519 real changes made)
+
+. save node_data_bymonth, replace
+(note: file node_data_bymonth.dta not found)
+file node_data_bymonth.dta saved
+
+. 
+. use mergeddata, clear 
+
+. keep if flag_gen_node == 1 
+(444,638 observations deleted)
+
+. keep if flag_in_geodata ==1 &  flag_gen_node == 1
+(49,011 observations deleted)
+
+. bysort iso node_lat node_long year month: gen te = _n
+
+. drop if te > 1
+(249,575 observations deleted)
+
+. drop te
+
+. drop nodeobs my_node_id 
+
+. by iso node_lat node_long: gen nodeobs = _N
+
+. drop if nodeobs < 48 
+(20,262 observations deleted)
+
+. by iso node_lat node_long: gen te = _n
+
+. keep if te == 1 
+(171,691 observations deleted)
+
+. bys node_lat node_long: gen tn = _N
+
+. tab tn
+
+         tn |      Freq.     Percent        Cum.
+------------+-----------------------------------
+          1 |      3,645       99.78       99.78
+          2 |          8        0.22      100.00
+------------+-----------------------------------
+      Total |      3,653      100.00
+
+. drop if tn > 1 & iso != "PJM" // a couple duplicates in PJM expanded territory. 
+(4 observations deleted)
+
+. drop te tn 
+
+. sort node_lat node_long
+
+. gen my_node_id = _n
+
+. save agg_node_info, replace // save this to retain actual node name later 
+(note: file agg_node_info.dta not found)
+file agg_node_info.dta saved
+
+. 
+. keep node_lat node_long iso my_node_id 
+
+. save tempdat, replace
+(note: file tempdat.dta not found)
+file tempdat.dta saved
+
+. 
+. use mergeddata, clear
+
+. drop nodeobs my_node_id 
+
+. merge m:1 iso node_lat node_long using tempdat, keep(match) nogen
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                           468,997  
+    -----------------------------------------
+
+. 
+. collapse (median) frac0 frac23 frac_marginal lmp_mean lmp_median node_lat node_long //
+> /
+>         (firstnm) iso , by(my_node_id year month)
+
+. sort my_node_id year month
+
+. by my_node: gen flag_firstob = _n
+
+. replace flag_firstob = 0 if flag_firstob > 1
+(171,503 real changes made)
+
+. save aggnode_data_bymonth, replace
+(note: file aggnode_data_bymonth.dta not found)
+file aggnode_data_bymonth.dta saved
+
+. 
+. /*******************************************************************************
+> COMPARE HOURLY AND SEASONAL VARIATION TO CALLAWAY PAPER
+> - THEIR DATA IS 2010 - 2012
+> - SEASONS ARE SUMMER = MAY - OCTOBER
+> - stat is marginal OPERATING EMISSION RATE (MOER) (lbs CO2/MWh)
+> *******************************************************************************/
+. 
+. *IMPORT DATA FROM CALLAWAY ET ALL APPENDIX
+. import excel using "$dropbox/Data/public/callaway_moer_data/callaway_et_al_appendix_ta
+> bles.xlsx", ///
+>         firstrow sheet("forstata") clear
+(8 vars, 48 obs)
+
+. rename California CAISO
+
+. rename ISONE NEISO
+
+. foreach v in CAISO ERCOT MISO NEISO NYISO PJM {
+  2.         rename `v' moer_`v'
+  3. }
+
+. lab var moer_CAISO CAISO
+
+. save "$generated_data/moerdata.dta", replace
+file C:\GitDir\Projects\ags_capital_vs_output/generated_data/moerdata.dta saved
+
+. 
+. *BRING IN HOUR OF DAY FRACTIONS 
+. use "$generated_data/lmp_hour_of_day_fractions", clear
+
+. drop if year == 2010 // this is incomplete for ercot
+(1,456 observations deleted)
+
+. gen season = cond(month > 4 & month < 11, "summer","winter")
+
+. collapse (mean) frac0_ = frac, by(iso season hour)
+
+. reshape wide frac0_, i(hour season) j(iso) str
+(note: j = CAISO ERCOT MISO NEISO NYISO PJM)
+
+Data                               long   ->   wide
+-----------------------------------------------------------------------------
+Number of obs.                      290   ->      51
+Number of variables                   4   ->       8
+j variable (6 values)               iso   ->   (dropped)
+xij variables:
+                                 frac0_   ->   frac0_CAISO frac0_ERCOT ... frac0_PJM
+-----------------------------------------------------------------------------
+
+. 
+. merge 1:1 hour season using "$generated_data/moerdata.dta", nogen keep(match) 
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                                48  
+    -----------------------------------------
+
+. save hourdata, replace
+(note: file hourdata.dta not found)
+file hourdata.dta saved
+
+. 
+. use hourdata, clear
+
+. twoway line moer_* hour if season == "summer", saving(moer_summer, replace) ///
+>         legend(rows(2)) xlabel(0(4)24) xtitle("") subtitle("Summer")
+(note: file moer_summer.gph not found)
+(file moer_summer.gph saved)
+
+.         
+. twoway line frac0_* hour if season == "summer", saving(np_summer, replace) ///
+>         legend(rows(2)) xlabel(0(4)24) xtitle("") ylabel(0(.05).15)  subtitle("Summer"
+> )
+(note: file np_summer.gph not found)
+(file np_summer.gph saved)
+
+.         
+. twoway line moer_* hour if season == "winter", saving(moer_winter, replace) ///
+>         legend(rows(2)) xlabel(0(4)24) xtitle("")  subtitle("Winter")
+(note: file moer_winter.gph not found)
+(file moer_winter.gph saved)
+
+.         
+. twoway line frac0_* hour if season == "winter", saving(np_winter, replace) ///
+>         legend(rows(2)) xlabel(0(4)24) xtitle("") ylabel(0(.05).15)  subtitle("Winter"
+> )
+(note: file np_winter.gph not found)
+(file np_winter.gph saved)
+
+. 
+. 
+. grc1leg  moer_summer.gph moer_winter.gph, /// 
+>         legendfrom(moer_summer.gph) l1("lbs CO2/ MWh") saving(tm, replace)
+(note: file tm.gph not found)
+(file tm.gph saved)
+
+.         
+. grc1leg np_summer.gph np_winter.gph , /// 
+>         legendfrom(np_summer.gph) l1("Negative Price %") saving(tn, replace)
+(note: file tn.gph not found)
+(file tn.gph saved)
+
+. 
+. grc1leg  tm.gph tn.gph, /// 
+>         legendfrom(tm.gph) rows(2) imargin(zero)
+
+. 
+. graph export "$repodir/output/figures/moer_np_season.png", replace
+(file C:\GitDir\Projects\ags_capital_vs_output/output/figures/moer_np_season.png written
+>  in PNG format)
+
+. 
+. 
+. *GET HOURLY MOER AND CORRELATION FOR DRAFT TABLE
+. use hourdata, clear
+
+. foreach ti in CAISO ERCOT MISO NEISO NYISO PJM {
+  2.         gen s_`ti' =  moer_`ti'
+  3. }
+
+. collapse (mean) s_* 
+
+. gen statrow = "moer"
+
+. keep statrow s_*
+
+. save tempdat, replace
+file tempdat.dta saved
+
+. 
+. use hourdata, clear
+
+. foreach ti in CAISO ERCOT MISO NEISO NYISO PJM {
+  2.         gen w_`ti' = frac0_`ti' * moer_`ti'
+  3. }
+(1 missing value generated)
+(2 missing values generated)
+
+. collapse (sum) w_* (sum) frac0* 
+
+. foreach ti in CAISO ERCOT MISO NEISO NYISO PJM {
+  2.         gen s_`ti' = w_`ti'/frac0_`ti'
+  3. }
+
+. gen statrow = "moer_wgt"
+
+. keep statrow s_*
+
+. append using tempdat
+
+. save tempdat, replace
+file tempdat.dta saved
+
+. 
+. use hourdata, clear
+
+. foreach ti in CAISO ERCOT MISO NEISO NYISO PJM {
+  2.         egen s_`ti' = corr(frac0_`ti' moer_`ti') 
+  3. }
+(1 missing value generated)
+(2 missing values generated)
+
+. collapse (mean) s_*
+
+. gen statrow = "corr"
+
+. keep statrow s_*
+
+. append using tempdat
+(note: variable statrow was str4, now str8 to accommodate using data's values)
+
+. order statrow s_CAISO s_ERCOT s_NEISO s_MISO s_NYISO s_PJM // alphabetical; NEISO is r
+> eally named ISONE
+
+. save moer_np_summary, replace
+(note: file moer_np_summary.dta not found)
+file moer_np_summary.dta saved
+
+. 
+. /*******************************************************************************
+> SUMMARIZE DATA BY ISO
+> - CREATE A DTA FILE THEN A TEX TABLE FOR SUBSET
+> *******************************************************************************/
+. *GET BOTTOM DECILE OF NODES IN EACH ISO
+. use aggnode_data_bymonth, clear
+
+. save node_fracs, replace
+(note: file node_fracs.dta not found)
+file node_fracs.dta saved
+
+. 
+. use node_fracs, replace
+
+. collapse (mean) frac*, by(iso my_node_id)
+
+. 
+. gsort iso -frac0
+
+. by iso: gen nrank = _n
+
+. egen Nt = count(frac0), by(iso)
+
+. gen npct = nrank/Nt
+
+. keep npct iso my_node*
+
+. save noderank, replace
+(note: file noderank.dta not found)
+file noderank.dta saved
+
+. 
+. ****************************
+. *export table with summary stats; make table in excel
+. 
+. capture program drop sumit
+
+. program define sumit
+  1. collapse (mean) mean_frac0=frac0 mean_frac_marginal=frac_marginal mean_frac23 = fra
+> c23 ///
+>         (p95) p95_frac0=frac0 (p95) p95_frac_marginal=frac_marginal (p95) p95_frac23 =
+>  frac23 ///
+>         (p50) med_frac0=frac0 (p50) med_frac_marginal=frac_marginal (p50) med_frac23 =
+> frac23 , by(iso)
+  2. end
+
+. 
+. use node_fracs, replace
+
+. sumit 
+
+. gen descript= "all_years"
+
+. save sumstats, replace
+(note: file sumstats.dta not found)
+file sumstats.dta saved
+
+. 
+. use node_fracs, replace
+
+. keep if month > 4 & month < 11
+(87,576 observations deleted)
+
+. sumit
+
+. gen descript= "summer"
+
+. append using sumstats
+(note: variable descript was str6, now str9 to accommodate using data's values)
+
+. save sumstats, replace
+file sumstats.dta saved
+
+. 
+. use node_fracs, replace
+
+. keep if year > 2012
+(87,576 observations deleted)
+
+. sumit
+
+. gen descript= "post2012"
+
+. append using sumstats
+(note: variable descript was str8, now str9 to accommodate using data's values)
+
+. save sumstats, replace
+file sumstats.dta saved
+
+. 
+. use node_fracs, clear
+
+. *merge m:1 iso node_name node_id  using noderank, nogen
+. merge m:1 iso my_node_id  using noderank, nogen
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                           175,152  
+    -----------------------------------------
+
+. keep if npct < .1
+(157,824 observations deleted)
+
+. sumit
+
+. gen descript= "bot10pct"
+
+. append using sumstats
+(note: variable descript was str8, now str9 to accommodate using data's values)
+
+. save sumstats, replace
+file sumstats.dta saved
+
+. 
+. use node_fracs, clear
+
+. *merge m:1 iso node_name node_id  using noderank, nogen
+. merge m:1 iso my_node_id  using noderank, nogen
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                           175,152  
+    -----------------------------------------
+
+. keep if npct < .1 & year > 2012
+(166,488 observations deleted)
+
+. sumit
+
+. gen descript= "bot10pct_post2012"
+
+. append using sumstats
+
+. save sumstats, replace
+file sumstats.dta saved
+
+. 
+. use node_fracs, clear
+
+. *merge m:1 iso node_name node_id  using noderank, nogen
+. merge m:1 iso my_node_id  using noderank, nogen
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                           175,152  
+    -----------------------------------------
+
+. keep if npct < .1 & month > 5 & month < 10
+(169,376 observations deleted)
+
+. sumit
+
+. gen descript= "bot10pct_summer"
+
+. append using sumstats
+(note: variable descript was str15, now str17 to accommodate using data's values)
+
+. save sumstats, replace
+file sumstats.dta saved
+
+. 
+. order desc iso mean* med* p*
+
+. save "$generated_data/negative_price_summary", replace
+file C:\GitDir\Projects\ags_capital_vs_output/generated_data/negative_price_summary.dta 
+> saved
+
+. 
+. /*******************************************************************************
+> *CREATE LATEX TABLE FOR DRAFT
+> *******************************************************************************/      
+>   
+. use "$generated_data/negative_price_summary", clear
+
+. foreach v of varlist mean_* med_* p95_* {
+  2.         rename `v' s_`v'
+  3. }
+
+. reshape long s_, i(iso descript) j(svar) str
+(note: j = mean_frac0 mean_frac23 mean_frac_marginal med_frac0 med_frac23 med_frac_margi
+> nal p95_frac0 p95_frac23 p95_frac_marginal)
+
+Data                               wide   ->   long
+-----------------------------------------------------------------------------
+Number of obs.                       36   ->     324
+Number of variables                  11   ->       4
+j variable (9 values)                     ->   svar
+xij variables:
+s_mean_frac0 s_mean_frac23 ... s_p95_frac_marginal->s_
+-----------------------------------------------------------------------------
+
+. gen statrow = descript + "_" + svar
+
+. drop descript svar
+
+. reshape wide s_, i(statrow) j(iso) str
+(note: j = CAISO ERCOT MISO NEISO NYISO PJM)
+
+Data                               long   ->   wide
+-----------------------------------------------------------------------------
+Number of obs.                      324   ->      54
+Number of variables                   3   ->       7
+j variable (6 values)               iso   ->   (dropped)
+xij variables:
+                                     s_   ->   s_CAISO s_ERCOT ... s_PJM
+-----------------------------------------------------------------------------
+
+. order statrow s_CAISO s_ERCOT s_NEISO s_MISO s_NYISO s_PJM // alphabetical; NEISO is r
+> eally named ISONE
+
+. save tempdat, replace
+file tempdat.dta saved
+
+. 
+. *CONVERT TO TEX TABLE
+. mat tlab = J(1,6,.)
+
+. mat cmat = tlab
+
+. 
+. *SUMMARY FOR ALL NODES
+. local snames all_years_mean_frac0 all_years_med_frac0 all_years_p95_frac0 ///
+>         summer_mean_frac0 post2012_mean_frac0
+
+. local ns: word count `snames'
+
+. di `ns'
+5
+
+. mat T = J(`ns',6,.)
+
+. local t = 0
+
+. foreach v in `snames' {
+  2.         di `t'
+  3.         local t = 1 + `t' 
+  4.         di "`v'"
+  5.         use tempdat, clear
+  6.         keep if statrow == "`v'"
+  7.         di _N
+  8.         mkmat s_*, mat(tm)
+  9. 
+.         forval i= 1/6 {
+ 10.                 mat T[`t',`i'] = tm[1,`i']
+ 11.         }
+ 12. }
+0
+all_years_mean_frac0
+(53 observations deleted)
+1
+1
+all_years_med_frac0
+(53 observations deleted)
+1
+2
+all_years_p95_frac0
+(53 observations deleted)
+1
+3
+summer_mean_frac0
+(53 observations deleted)
+1
+4
+post2012_mean_frac0
+(53 observations deleted)
+1
+
+. mat cmat = cmat\T\tlab
+
+. 
+. *ADD MOERS
+. local snames moer moer_wgt corr
+
+. local ns: word count `snames'
+
+. di `ns'
+3
+
+. mat T = J(`ns',6,.)
+
+. local t = 0
+
+. foreach v in `snames' {
+  2.         di `t'
+  3.         local t = 1 + `t' 
+  4.         di "`v'"
+  5.         use moer_np_summary, clear
+  6.         keep if statrow == "`v'"
+  7.         di _N
+  8.         mkmat s_*, mat(tm)
+  9. 
+.         forval i= 1/6 {
+ 10.                 mat T[`t',`i'] = tm[1,`i']
+ 11.         }
+ 12. }
+0
+moer
+(2 observations deleted)
+1
+1
+moer_wgt
+(2 observations deleted)
+1
+2
+corr
+(2 observations deleted)
+1
+
+. 
+. mat cmat = cmat\T
+
+. 
+. 
+. mat rownames cmat = "\textbf{\underline{All nodes}}" "Mean" "Median" "95th pctile" ///
+>                                         "Summer (mean)" "Post 2012 (mean)" /// 
+>                                         "\textbf{\underline{CO2 MOER}}" "Mean" "Mean (
+> weighted)" "Correlation" 
+
+. 
+. frmttable using "$outdir/tables/negative_price_summary.tex", statmat(cmat) varlabels r
+> eplace ///
+>         ctitle("", "CAISO", "ERCOT", "ISONE", "MISO", "NYISO", "PJM") hlines(11{0}1) f
+> rag tex  /// 
+>         sdec(2,2,2,2,2,2 \ 2,2,2,2,2,2 \ 2,2,2,2,2,2 \ 2,2,2,2,2,2 \ 2,2,2,2,2,2 \ 2,2
+> ,2,2,2,2 \ ///
+>          2,2,2,2,2,2 \ 2,2,2,2,2,2 \ 2,2,2,2,2,2 \ 2,2,2,2,2,2 \ /// *   2,2,2,2,2,2 \
+>  2,2,2,2,2,2 \ 2,2,2,2,2,2 \ 2,2,2,2,2,2 \ ///
+>          0,0,0,0,0,0 \ 0,0,0,0,0,0 \  0,0,0,0,0,0 \ 2,2,2,2,2,2)
+
+   ----------------------------------------------------------------------------------
+                                     CAISO    ERCOT     ISONE      MISO     NYISO   
+   ----------------------------------------------------------------------------------
+    \textbf{\underline{All nodes}}                                                  
+    Mean                              3.88     1.41      0.08      3.39      0.65   
+    Median                            2.53     0.00      0.00      1.25      0.40   
+    95th pctile                      16.26     8.21      0.00     14.43      2.02   
+    Summer(mean)                      4.59     0.74      0.01      2.95      0.67   
+    Post 2012 (mean)                  2.24     0.59      0.16      3.18      0.74   
+    \textbf{\underline{CO2 MOER}}                                                   
+    Mean                             896.02  1,377.63  1,261.94  1,869.54  1,311.85 
+    Mean(weighted)                   873.05  1,456.91  1,168.99  1,916.27  1,407.88 
+    Correlation                      -0.46     0.60     -0.72      0.69      0.41   
+   ----------------------------------------------------------------------------------
+
+
+                      --------------------------------------------
+                                                          PJM    
+                      --------------------------------------------
+                       \textbf{\underline{All nodes}}            
+                       Mean                               0.55   
+                       Median                             0.13   
+                       95th pctile                        2.42   
+                       Summer(mean)                       0.69   
+                       Post 2012 (mean)                   0.40   
+                       \textbf{\underline{CO2 MOER}}             
+                       Mean                             1,776.44 
+                       Mean(weighted)                   1,778.10 
+                       Correlation                        0.02   
+                      --------------------------------------------
+
+
+. 
+. *        spacebef(1000010010001000) ///
+> 
+. /*******************************************************************************
+> COMPARE HOURLY VARIATION TO HMMY (AER 2016)
+> - stat is average marginal damages of load by NERC region - hour in dollar terms
+> - includes both local and global pollutants
+> - they construct these using econometric estimates and integrated assessment model
+> - we use HMMY's baseline assumptions
+> Data source: Holland, Stephen P., Erin T. Mansur, Nicholas Z. Muller, and Andrew J. Ya
+> tes. 2016. "Are There Environmental Benefits from Driving Electric Vehicles? The Impor
+> tance of Local Factors." American Economic Review, 106 (12): 3700-3729.
+> *******************************************************************************/
+. *GOING TO POST THIS DTA NOT THE EXCEL FILE, SO ONLY READ IN RAW DATA ONCE
+. *code for reading data is from HMMY (AER 2016) with minor modifications needed to run
+. cap confirm file "$generated_data/md_from_hhmy_aer_2016.dta"
+
+. if _rc!=0 { // only read in data the first time
+.         local SCC 41
+.         local CPIadj 1.37
+.         local year= 2011
+.         use "$dropbox/Data/public/HMMY_AER_2016/MD Veh calcs posted/MDelectric_local_`
+> year'.dta", clear
+.         merge 1:1 hour using "$dropbox/Data/public/HMMY_AER_2016/MD Veh calcs posted/M
+> Delectric_carbon_`year'.dta"
+.         foreach X in ercot wecc frcc mro npcc rfc serc spp ca {
+  2.                 replace `X'=`CPIadj'*(`X')+`SCC'*co2_md_kwh_`X'/35
+  3.         }
+.         drop co2* _merge
+.         rename * md*
+.         rename mdhour hour
+.         reshape long md, i(hour) j(region) string
+.         replace md = md*1000 // $/kWh to $/MWh
+.         lab var md "Marginal Damages from HMMY (AER 2016) in 2014 $/MWh"
+.         sort region hour
+.         compress
+.         save "$generated_data/md_from_hhmy_aer_2016.dta", replace
+. }
+
+. 
+. *plot marginal damages from load along with PTC value, both in $/MWh
+. use "$generated_data/md_from_hhmy_aer_2016.dta", clear
+
+. replace region = upper(region)
+(216 real changes made)
+
+. reshape wide md, i(hour) j(region) string
+(note: j = CA ERCOT FRCC MRO NPCC RFC SERC SPP WECC)
+
+Data                               long   ->   wide
+-----------------------------------------------------------------------------
+Number of obs.                      216   ->      24
+Number of variables                   3   ->      10
+j variable (9 values)            region   ->   (dropped)
+xij variables:
+                                     md   ->   mdCA mdERCOT ... mdWECC
+-----------------------------------------------------------------------------
+
+. ren md* *
+
+. ds hour, not
+CA     ERCOT  FRCC   MRO    NPCC   RFC    SERC   SPP    WECC
+
+. foreach v of var `r(varlist)' {
+  2.         lab var `v' `v'
+  3. }
+
+. ren * md_*
+
+. ren md_hour hour
+
+. twoway line md_* hour, ///
+>         yline(23, lwidth(medthick) lcolor(gs0)) ///
+>         legend(cols(4)) xtitle("Hour of Day") ///
+>         xlabel(4(4)24) ///
+>         ytitle("Average Marginal Damages ($/MWh)")
+
+. graph export "$repodir/output/figures/md_np_hmmy.png", replace
+(file C:\GitDir\Projects\ags_capital_vs_output/output/figures/md_np_hmmy.png written in 
+> PNG format)
+
+. 
+. ********************************************************************************
+. tempsetup
+C:\GitDir\Projects\ags_capital_vs_output\temp
+
+. cd "$repodir" 
+C:\GitDir\Projects\ags_capital_vs_output
+
+. capture log close

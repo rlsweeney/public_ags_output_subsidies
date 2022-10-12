@@ -1,0 +1,29 @@
+{
+\def\sym#1{\ifmmode^{#1}\else\(^{#1}\)\fi}
+\begin{tabular}{l*{5}{c}}
+\toprule
+                &\multicolumn{1}{c}{(1)}         &\multicolumn{1}{c}{(2)}         &\multicolumn{1}{c}{(3)}         &\multicolumn{1}{c}{(4)}         &\multicolumn{1}{c}{(5)}         \\
+\midrule
+Design Wind Speed&    0.304\sym{***}&  -0.0421         &  -0.0457         &  0.00542         &                  \\
+                &  (0.104)         &  (0.106)         &  (0.105)         & (0.0908)         &                  \\
+\addlinespace
+Wind Speed (m/s)&                  &    0.862         &    2.163         &                  &                  \\
+                &                  &  (3.470)         &  (3.527)         &                  &                  \\
+\addlinespace
+Wind Speed Squared&                  &    0.910\sym{**} &    0.797\sym{*}  &                  &                  \\
+                &                  &  (0.418)         &  (0.419)         &                  &                  \\
+\addlinespace
+Wind Speed Cubed&                  &  -0.0456\sym{***}&  -0.0444\sym{***}&                  &                  \\
+                &                  & (0.0151)         & (0.0150)         &                  &                  \\
+\addlinespace
+Var(Wind Speed) &                  &                  &    0.170         &                  &   -0.156\sym{*}  \\
+                &                  &                  &  (0.136)         &                  & (0.0915)         \\
+\addlinespace
+Potential Capacity Factor&                  &                  &                  &    0.619\sym{***}&    0.638\sym{***}\\
+                &                  &                  &                  & (0.0224)         & (0.0265)         \\
+\midrule
+Adjusted R-sq.  &    0.287         &    0.504         &    0.505         &    0.572         &    0.572         \\
+N               &    11140         &    11140         &    11140         &    11140         &    11140         \\
+\bottomrule
+\end{tabular}
+}

@@ -1,0 +1,24 @@
+{
+\def\sym#1{\ifmmode^{#1}\else\(^{#1}\)\fi}
+\begin{tabular}{l*{4}{c}}
+\toprule
+                &\multicolumn{1}{c}{(1)}         &\multicolumn{1}{c}{(2)}         &\multicolumn{1}{c}{(3)}         &\multicolumn{1}{c}{(4)}         \\
+\midrule
+1603 Grant      &    -2.89\sym{**} &    -3.16\sym{***}&    -4.77\sym{**} &    -1.35         \\
+                &   (1.24)         &   (1.17)         &   (2.24)         &   (2.24)         \\
+\addlinespace
+Distance        &                  &                  &     0.17         &    0.015         \\
+                &                  &                  &   (0.14)         &   (0.11)         \\
+\addlinespace
+Distance x Post &                  &                  &    -0.13         &    -0.26         \\
+                &                  &                  &   (0.20)         &   (0.22)         \\
+\midrule
+Regression Type &     2SLS         &     2SLS         &     2SLS         &     2SLS         \\
+Controls        &        Y         &        Y         &        Y         &        Y         \\
+State FE        &        N         &        Y         &        N         &        Y         \\
+Trend           &        N         &        N         &        Y         &        Y         \\
+N               &     8752         &     8752         &     8752         &     8752         \\
+First-stage F-stat.&      169         &      113         &       32         &       22         \\
+\bottomrule
+\end{tabular}
+}

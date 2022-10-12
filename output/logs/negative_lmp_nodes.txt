@@ -1,0 +1,324 @@
+------------------------------------------------------------------------------------------
+      name:  <unnamed>
+       log:  D:\GitDir\Projects\ags_capital_vs_output/output/logs/negative_lmp_nodes.txt
+  log type:  text
+ opened on:  13 Jul 2022, 07:05:58
+
+. ********************************************************************************
+. 
+. global lmp_data "$dropbox/Data/public/ISO_LMP"
+
+. global output "$repodir/generated_data"
+
+. 
+. ****************************************************************************************
+> ************
+. *                       CALCULATE FRACTION OF NODE-YEAR-MONTH WITH NEGATIVE PRICES FOR E
+> ACH ISO
+. ****************************************************************************************
+> ************
+. /* The following program is used to calculate the fraction of node hours in a month that
+>    are below 0 and - 23. It also calculates median and mean prices for LMP
+>    
+>    Some ISO have node name as the identifer and some have id. The input parameter specif
+> ices which
+>    to use
+> */
+. capture program drop calc_fractions
+
+. program define calc_fractions
+  1.         args id_var
+  2.         qui {
+  3.                 gen month = month(date)
+  4.                 gen year = year(date)
+  5.                 *Make sure there is only a single year
+.                 qui tab year
+  6.                 assert `r(r)' == 1
+  7.                 
+.                 bys `id_var' year month: gen total_obs = _N
+  8.                 foreach lmp_val in 0 23 {
+  9.                         bys `id_var' year month: egen count_below_`lmp_val' = total(l
+> mp < `= -1 * `lmp_val'')
+ 10.                         gen fract_below_`lmp_val' = count_below_`lmp_val' / total_obs
+ 11.                 }
+ 12.                 assert count_below_23 <= count_below_0
+ 13.                 
+.                 foreach stat in mean median {
+ 14.                         bys `id_var' year month: egen lmp_`stat' = `stat'(lmp)
+ 15.                 }
+ 16.         }
+ 17.                 
+. end
+
+. 
+. **********************************************
+. * PJM - Node name is not unique. ID is unique
+. **********************************************
+. forval year = 2011 / 2015 {
+  2.         di "`year'"
+  3.         qui {
+  4.                 use "$lmp_data/PJM/pjm_`year'.dta", clear
+  5.                 
+.                 calc_fractions node_id
+  6.                 * Rich wants to know which ID has the most obs inside each node name
+.                 bys node_name node_id year month: gen node_id_obs = _N
+  7.                 keep node_id node_name year month fract_below* lmp_mean lmp_median no
+> de_id_obs
+  8.                 bys node_id node_name year month: keep if _n == 1
+  9.                 drop if node_id == .
+ 10.                 
+.                 tempfile pjm_`year'
+ 11.                 save "`pjm_`year''"
+ 12.         }
+ 13. }
+2011
+2012
+2013
+2014
+2015
+
+. clear
+
+. forval year = 2011 / 2014 {
+  2.         append using "`pjm_`year''"
+  3. }
+
+. 
+. * MAKE A NOTE OF WHICH NODE ID INSIDE NODE_NAME HAS MOST DATA
+. bys node_name node_id: egen total_node_id_obs = total(node_id_obs)
+
+. bys node_name: egen node_with_most = max(total_node_id_obs)
+
+. gen node_with_most_flag = cond(total_node_id_obs == node_with_most, 1, 0)
+
+. label var node_with_most_flag "Node ID with the most observations inside Node_name"
+
+. drop total_node_id_obs node_with_most node_id_obs
+
+. 
+. gen iso = "PJM"
+
+. order node_id node_name month year
+
+. sort node_id node_name year month
+
+. compress
+  variable month was float now byte
+  variable year was float now int
+  variable node_with_most_flag was float now byte
+  (4,002,368 bytes saved)
+
+. save "$output/pjm_negative_lmp.dta", replace
+(note: file D:\GitDir\Projects\ags_capital_vs_output/generated_data/pjm_negative_lmp.dta n
+> ot found)
+file D:\GitDir\Projects\ags_capital_vs_output/generated_data/pjm_negative_lmp.dta saved
+
+. 
+. *********
+. * ERCOT
+. **********
+. forval year = 2011 / 2014 { 
+  2.         di "`year'"
+  3.         use "$lmp_data/ERCOT/ercot_`year'.dta", clear
+  4.         
+.         calc_fractions node_name
+  5.         keep node_name year month fract_below* lmp_mean lmp_median
+  6.         bys node_name year month: keep if _n == 1
+  7.         tempfile ercot_`year'
+  8.         save "`ercot_`year''"   
+  9. }
+2011
+(4,872,037 observations deleted)
+file C:\Users\Rich\AppData\Local\Temp\ST_4840_000006.tmp saved
+2012
+(4,784,573 observations deleted)
+file C:\Users\Rich\AppData\Local\Temp\ST_4840_000007.tmp saved
+2013
+(4,858,040 observations deleted)
+file C:\Users\Rich\AppData\Local\Temp\ST_4840_000008.tmp saved
+2014
+(5,025,024 observations deleted)
+file C:\Users\Rich\AppData\Local\Temp\ST_4840_000009.tmp saved
+
+. clear
+
+. forval year = 2011 / 2014 {
+  2.         append using "`ercot_`year''"
+  3. }
+
+. gen iso = "ERCOT"
+
+. save "$output/ercot_negative_lmp.dta",replace
+(note: file D:\GitDir\Projects\ags_capital_vs_output/generated_data/ercot_negative_lmp.dta
+>  not found)
+file D:\GitDir\Projects\ags_capital_vs_output/generated_data/ercot_negative_lmp.dta saved
+
+. 
+. *********
+. * MISO
+. *********
+. forval year = 2011 / 2014 { 
+  2.         di "`year'"
+  3.         use "$lmp_data/MISO/miso_`year'.dta", clear
+  4.         
+.         calc_fractions node_name
+  5.         keep node_name type year month fract_below* lmp_mean lmp_median
+  6.         bys node_name month year: keep if _n == 1
+  7.         tempfile miso_`year'
+  8.         save "`miso_`year''"
+  9. }
+2011
+(16,328,076 observations deleted)
+file C:\Users\Rich\AppData\Local\Temp\ST_4840_00000a.tmp saved
+2012
+(15,214,043 observations deleted)
+file C:\Users\Rich\AppData\Local\Temp\ST_4840_00000b.tmp saved
+2013
+(15,513,968 observations deleted)
+file C:\Users\Rich\AppData\Local\Temp\ST_4840_00000c.tmp saved
+2014
+(19,390,196 observations deleted)
+file C:\Users\Rich\AppData\Local\Temp\ST_4840_00000d.tmp saved
+
+. clear
+
+. forval year = 2011 / 2014 {
+  2.         append using "`miso_`year''"
+  3. }
+
+. gen iso = "MISO"
+
+. compress
+  variable month was float now byte
+  variable year was float now int
+  (457,065 bytes saved)
+
+. save "$output/miso_negative_lmp.dta", replace
+(note: file D:\GitDir\Projects\ags_capital_vs_output/generated_data/miso_negative_lmp.dta 
+> not found)
+file D:\GitDir\Projects\ags_capital_vs_output/generated_data/miso_negative_lmp.dta saved
+
+.         
+. ******************************
+. * NEISO - has ID but node
+. ******************************
+. forval year = 2011 / 2014 { 
+  2.         di "`year'"
+  3.         qui {
+  4.                 use "$lmp_data/NEISO/neiso_lmp_`year'.dta", clear
+  5.                 calc_fractions node_name
+  6.                 keep node_name type year month fract_below* lmp_mean lmp_median
+  7.                 bys node_name year month: keep if _n == 1
+  8.                 tempfile neiso_`year'
+  9.                 save "`neiso_`year''"
+ 10.         }
+ 11. }
+2011
+2012
+2013
+2014
+
+. clear
+
+. forval year = 2011 / 2014 {
+  2.         append using "`neiso_`year''"
+  3. }
+
+. gen iso = "NEISO"
+
+. compress
+  variable month was float now byte
+  variable year was float now int
+  (253,590 bytes saved)
+
+. save "$output/neiso_negative_lmp.dta", replace
+(note: file D:\GitDir\Projects\ags_capital_vs_output/generated_data/neiso_negative_lmp.dta
+>  not found)
+file D:\GitDir\Projects\ags_capital_vs_output/generated_data/neiso_negative_lmp.dta saved
+
+. 
+. ********************************************
+. * NYISO - has ID but node name is unique
+. ********************************************
+. forval year = 2011 / 2014 { 
+  2.         di "`year'"
+  3.         qui {
+  4.                 use "$lmp_data/NYISO/nyiso_`year'.dta", clear
+  5.                 calc_fractions node_name
+  6.                 keep node_name year month fract_below* lmp_mean lmp_median type
+  7.                 * Faster than duplicates drop
+.                 bys node_name year month: keep if _n == 1
+  8.                 tempfile nyiso_`year'
+  9.                 save "`nyiso_`year''"
+ 10.         }
+ 11. }
+2011
+2012
+2013
+2014
+
+. clear
+
+. forval year = 2011 / 2014 {
+  2.         append using "`nyiso_`year''"
+  3. }
+
+. gen iso = "NYISO"
+
+. compress
+  variable month was float now byte
+  variable year was float now int
+  (123,170 bytes saved)
+
+. save "$output/nyiso_negative_lmp.dta", replace
+(note: file D:\GitDir\Projects\ags_capital_vs_output/generated_data/nyiso_negative_lmp.dta
+>  not found)
+file D:\GitDir\Projects\ags_capital_vs_output/generated_data/nyiso_negative_lmp.dta saved
+
+. 
+. *******************************
+. * CAISO - NODE_NAME IS UNIQUE
+. * - 2009 data looks incomplete. starting in 2010
+. *******************************
+. forval year = 2011 / 2014 { 
+  2.         di "`year'"
+  3.         qui {
+  4.                 use "$lmp_data/CAISO/caiso`year'.dta", clear
+  5.                 calc_fractions node_name
+  6.                 keep node_name year month fract_below* lmp_mean lmp_median
+  7.                 * Faster than duplicates drop
+.                 bys node_name year month: keep if _n == 1
+  8.                 tempfile caiso_`year'
+  9.                 save "`caiso_`year''"
+ 10.         }
+ 11. }
+2011
+2012
+2013
+2014
+
+. clear
+
+. forval year = 2011 / 2014 {
+  2.         append using "`caiso_`year''"
+  3. }
+(note: variable node_name was str24, now str26 to accommodate using data's values)
+
+. gen iso = "CAISO"
+
+. compress
+  variable month was float now byte
+  variable year was float now int
+  (1,224,385 bytes saved)
+
+. save "$output/caiso_negative_lmp.dta", replace
+(note: file D:\GitDir\Projects\ags_capital_vs_output/generated_data/caiso_negative_lmp.dta
+>  not found)
+file D:\GitDir\Projects\ags_capital_vs_output/generated_data/caiso_negative_lmp.dta saved
+
+. 
+. ********************************************************************************
+. tempsetup
+D:\GitDir\Projects\ags_capital_vs_output\temp
+
+. capture log close

@@ -1,0 +1,380 @@
+------------------------------------------------------------------------------------------
+      name:  <unnamed>
+       log:  D:\GitDir\Projects\ags_capital_vs_output/output/logs/match_nodes_to_lat_long.
+> txt
+  log type:  text
+ opened on:  13 Jul 2022, 08:50:16
+
+. ********************************************************************************
+. global output "$repodir/generated_data"
+
+. 
+. *******************************
+. * BRING IN SNL LAT/LONG DATA
+. *******************************
+. import excel "$dropbox\Data\proprietary\snl\LMP lat longs.xlsx", firstrow clear
+
+. renvars, lower
+
+. rename (lmpkey lmpname isoname) (node_id node_name iso)
+
+. drop isokey node_id
+
+. 
+. replace iso = "CAISO" if regexm(iso, "California Independent")
+(9,906 real changes made)
+
+. replace iso = "PJM"   if regexm(iso, "PJM")
+(11,483 real changes made)
+
+. replace iso = "NEISO" if iso == "ISO New England"
+(1,118 real changes made)
+
+. replace iso = "MISO"  if iso == "Midcontinent Independent System Operator"
+(1,731 real changes made)
+
+. replace iso = "ERCOT" if iso == "Electric Reliability Council of Texas"
+(630 real changes made)
+
+. replace iso = "NYISO" if iso == "New York Independent System Operator"
+(563 real changes made)
+
+. keep if inlist(iso, "CAISO", "PJM", "NEISO", "MISO", "ERCOT", "NYISO")
+(7,514 observations deleted)
+
+. 
+. replace latitude = "" if latitude == "NULL"
+(1 real change made)
+
+. replace longitude = "" if longitude == "NULL"
+(1 real change made)
+
+. destring latitude longitude, replace
+latitude: all characters numeric; replaced as double
+(1 missing value generated)
+longitude: all characters numeric; replaced as double
+(1 missing value generated)
+
+. compress
+  variable iso was str40 now str5
+  (890,085 bytes saved)
+
+. save "snl_nodes_latlong.dta", replace
+(note: file snl_nodes_latlong.dta not found)
+file snl_nodes_latlong.dta saved
+
+. 
+. 
+. ********************************
+. * MERGE NODE DATA WITH LAT LONG
+. ********************************
+. 
+. /* EVENTUALLY FOR ALL BUT PJM, JUST START WITH THE ALL ISO'S DATASET */
+. 
+. * NYISO
+. use "$output/nyiso_negative_lmp.dta", clear
+
+. keep node_name iso type
+
+. duplicates drop
+
+Duplicates in terms of all variables
+
+(24,107 observations deleted)
+
+. merge 1:1 node_name iso using "snl_nodes_latlong.dta"
+(note: variable node_name was str31, now str35 to accommodate using data's values)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                        24,946
+        from master                        21  (_merge==1)
+        from using                     24,925  (_merge==2)
+
+    matched                               506  (_merge==3)
+    -----------------------------------------
+
+. drop if iso != "NYISO"
+(24,868 observations deleted)
+
+. tempfile nyiso_matches
+
+. save "`nyiso_matches'"
+file C:\Users\Rich\AppData\Local\Temp\ST_4840_000001.tmp saved
+
+. 
+. 
+. * ERCOT
+. use "$output/ercot_negative_lmp.dta", clear
+
+. keep node_name iso
+
+. duplicates drop
+
+Duplicates in terms of all variables
+
+(26,234 observations deleted)
+
+. merge 1:1 node_name iso using "snl_nodes_latlong.dta"
+(note: variable node_name was str12, now str35 to accommodate using data's values)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                        24,933
+        from master                        80  (_merge==1)
+        from using                     24,853  (_merge==2)
+
+    matched                               578  (_merge==3)
+    -----------------------------------------
+
+. drop if iso != "ERCOT"
+(24,801 observations deleted)
+
+. tempfile ercot_matches
+
+. save "`ercot_matches'"
+file C:\Users\Rich\AppData\Local\Temp\ST_4840_000002.tmp saved
+
+. 
+. * MISO
+. use "$output/miso_negative_lmp.dta", clear
+
+. replace node_name = trim(node_name)
+(0 real changes made)
+
+. keep node_name iso type
+
+. duplicates drop
+
+Duplicates in terms of all variables
+
+(88,560 observations deleted)
+
+. drop if node_name == "NSP.BAT.SER" & type == "" // gennode only filled in for some years
+> . Verified in the data
+(1 observation deleted)
+
+. merge 1:1 node_name iso using "snl_nodes_latlong.dta"
+(note: variable node_name was str14, now str35 to accommodate using data's values)
+(note: variable iso was str4, now str5 to accommodate using data's values)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                        25,191
+        from master                     1,306  (_merge==1)
+        from using                     23,885  (_merge==2)
+
+    matched                             1,546  (_merge==3)
+    -----------------------------------------
+
+. drop if iso != "MISO"
+(23,700 observations deleted)
+
+. tempfile miso_matches
+
+. save "`miso_matches'"
+file C:\Users\Rich\AppData\Local\Temp\ST_4840_000003.tmp saved
+
+. 
+. * NEISO
+. use "$output/neiso_negative_lmp.dta", clear
+
+. replace node_name = trim(node_name)
+(2,300 real changes made)
+
+. keep node_name iso type
+
+. duplicates drop
+
+Duplicates in terms of all variables
+
+(49,467 observations deleted)
+
+. merge 1:1 node_name iso using "snl_nodes_latlong.dta"
+(note: variable node_name was str26, now str35 to accommodate using data's values)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                        24,570
+        from master                       195  (_merge==1)
+        from using                     24,375  (_merge==2)
+
+    matched                             1,056  (_merge==3)
+    -----------------------------------------
+
+. drop if iso != "NEISO"
+(24,313 observations deleted)
+
+. tempfile neiso_matches
+
+. save "`neiso_matches'"
+file C:\Users\Rich\AppData\Local\Temp\ST_4840_000004.tmp saved
+
+. 
+. *CAISO
+. * First prepare Node Type crosswalk
+. local xsheet "$dropbox\Data\public\ISO_LMP\CAISO\FullNetworkModel_NodeMapping.xls"
+
+. import excel "`xsheet'", sheet("GEN_RES") firstrow clear
+
+. keep PNODEAPNODEID COMMENTS
+
+. gen ag_gen_node = cond(regexm(COMMENTS, "Aggregated Pnode"), 1, 0)
+
+. drop COMMENTS
+
+. rename PNODEAPNODEID node_name
+
+. duplicates drop
+
+Duplicates in terms of all variables
+
+(40 observations deleted)
+
+. tempfile gen_nodes
+
+. save "`gen_nodes'"
+file C:\Users\Rich\AppData\Local\Temp\ST_4840_000005.tmp saved
+
+. 
+. 
+. use "$output/caiso_negative_lmp.dta", clear 
+
+. 
+. * BRING IN NODE TYPE
+. merge m:1 node_name using "`gen_nodes'", keep(master matched) 
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                       202,852
+        from master                   202,852  (_merge==1)
+        from using                          0  (_merge==2)
+
+    matched                            42,025  (_merge==3)
+    -----------------------------------------
+
+. gen gen_node = cond(_merge == 3, 1, 0)
+
+. drop  _merge
+
+. replace ag_gen_node = 1 if ag_gen_node == .
+(202,852 real changes made)
+
+. 
+. keep node_name iso gen_node ag_gen_node
+
+. duplicates drop
+
+Duplicates in terms of all variables
+
+(237,967 observations deleted)
+
+. merge 1:1 node_name iso using "snl_nodes_latlong.dta"
+(note: variable node_name was str26, now str35 to accommodate using data's values)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                        19,613
+        from master                       546  (_merge==1)
+        from using                     19,067  (_merge==2)
+
+    matched                             6,364  (_merge==3)
+    -----------------------------------------
+
+. drop if iso != "CAISO"
+(15,525 observations deleted)
+
+. tempfile caiso_matches
+
+. save "`caiso_matches'"
+file C:\Users\Rich\AppData\Local\Temp\ST_4840_000006.tmp saved
+
+. 
+. 
+. * To save memory, I kept PJM ID data in a seperate file
+. use "$dropbox/Data/public/ISO_LMP/PJM/pjm_node_id_info.dta", clear
+
+. gen iso = "PJM"
+
+. sort node_id
+
+. rename node_name node_name_only
+
+. gen node_name = node_name_only + " " + equipment + " " + voltage
+
+. 
+. merge m:1 node_name iso using "snl_nodes_latlong.dta"
+(note: variable node_name was str26, now str35 to accommodate using data's values)
+(note: variable iso was str3, now str5 to accommodate using data's values)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                        20,386
+        from master                     4,083  (_merge==1)
+        from using                     16,303  (_merge==2)
+
+    matched                             9,221  (_merge==3)
+    -----------------------------------------
+
+. drop if iso != "PJM"
+(13,948 observations deleted)
+
+. 
+. *PJM MONTHLY DATA DOES NOT HAVE THE LONG NAME SO NEED TO KEEP THIS
+. rename node_name node_name_long
+
+. rename node_name_only node_name
+
+. keep node_id node_name* type iso state latitude longitude _merge zone
+
+. tempfile pjm_matches
+
+. save "`pjm_matches'"
+file C:\Users\Rich\AppData\Local\Temp\ST_4840_000007.tmp saved
+
+. 
+. 
+. * Bring them all together
+. clear
+
+. foreach iso in nyiso ercot miso neiso pjm caiso {
+  2.         append using "``iso'_matches'"
+  3. }
+(label _merge already defined)
+(label _merge already defined)
+(note: variable type was str9, now str12 to accommodate using data's values)
+(label _merge already defined)
+(note: variable type was str12, now str20 to accommodate using data's values)
+(label _merge already defined)
+(label _merge already defined)
+
+. 
+. * Generate a Variable
+. rename _merge node_in_data
+
+. label define node 1 "Only in LMP Data" 2 "Only in Lat/Long Data" 3 "In both Lat/Long and
+>  LMP data"
+
+. label values node_in_data node
+
+. compress
+  variable ag_gen_node was float now byte
+  variable gen_node was float now byte
+  variable zone was str19 now str8
+  variable node_name_long was str35 now str26
+  (825,630 bytes saved)
+
+. order node_id node_name
+
+. save "$output/lmp_nodes_with_lat_long.dta", replace
+(note: file D:\GitDir\Projects\ags_capital_vs_output/generated_data/lmp_nodes_with_lat_lon
+> g.dta not found)
+file D:\GitDir\Projects\ags_capital_vs_output/generated_data/lmp_nodes_with_lat_long.dta s
+> aved
+
+. 
+. ********************************************************************************
+. tempsetup
+D:\GitDir\Projects\ags_capital_vs_output\temp
+
+. capture log close

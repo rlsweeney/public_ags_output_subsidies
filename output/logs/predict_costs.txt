@@ -1,0 +1,406 @@
+----------------------------------------------------------------------------------------
+      name:  <unnamed>
+       log:  C:\GitDir\Projects\ags_capital_vs_output/output/logs/predict_costs.txt
+  log type:  text
+ opened on:  14 Jul 2022, 09:36:53
+
+. ********************************************************************************
+. 
+. use $repodir/generated_data/deflators, clear
+
+. rename year firstyear
+
+. save fdeflator, replace 
+(note: file fdeflator.dta not found)
+file fdeflator.dta saved
+
+. 
+. *IMPORT EXTERNAL COST ESTIMATES 
+. ** clean in `clean_bnef_cost_data.do`
+. use $repodir/generated_data/static_reg_data, clear
+
+. di _N
+959
+
+. merge 1:1 facilityid using $repodir/generated_data/external_data_all, nogen keep(match
+>  master)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                           317
+        from master                       317  
+        from using                          0  
+
+    matched                               642  
+    -----------------------------------------
+
+. 
+. gen st_cost1603 = amount_funded/.3/1000000
+(701 missing values generated)
+
+. gen st_cost1603_permw = st_cost1603/first_nameplate_capacity
+(701 missing values generated)
+
+. 
+. gen costgoogle_permw = CostGoogle/first_nameplate_capacity
+(940 missing values generated)
+
+. 
+. merge m:1 firstyear using fdeflator, nogen keep(match master)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                               959  
+    -----------------------------------------
+
+. 
+. foreach v of varlist costbnef_permw costsnl_permw costgoogle_permw st_cost1603_permw {
+  2.         replace `v' = `v'*gdp_deflator
+  3. }
+(208 real changes made)
+(69 real changes made)
+(19 real changes made)
+(258 real changes made)
+
+. 
+. save tempdat, replace
+(note: file tempdat.dta not found)
+file tempdat.dta saved
+
+. 
+. use tempdat, clear
+
+. keep if firstyear >= 2008 & firstyear <= 2013 
+(442 observations deleted)
+
+. 
+. foreach v of varlist costbnef_permw costsnl_permw costgoogle_permw st_cost1603_permw {
+  2.         rename `v' c_`v'
+  3. }
+
+. 
+. keep facilityid firstyear c_*
+
+. 
+. reshape long c_ , i(facilityid) j(cvar, string)
+(note: j = costbnef_permw costgoogle_permw costsnl_permw st_cost1603_permw)
+
+Data                               wide   ->   long
+-----------------------------------------------------------------------------
+Number of obs.                      517   ->    2068
+Number of variables                   6   ->       4
+j variable (4 values)                     ->   cvar
+xij variables:
+c_costbnef_permw c_costgoogle_permw ... c_st_cost1603_permw->c_
+-----------------------------------------------------------------------------
+
+. drop if c_ == . 
+(1,604 observations deleted)
+
+. sum c_, detail
+
+                             c_
+-------------------------------------------------------------
+      Percentiles      Smallest
+ 1%     1.275071       .0762804
+ 5%     1.549635       .4725127
+10%     1.698675       1.222091       Obs                 464
+25%     1.921434        1.23995       Sum of Wgt.         464
+
+50%     2.160576                      Mean           2.263762
+                        Largest       Std. Dev.      .6011855
+75%      2.46531        4.88533
+90%     2.926829       4.995461       Variance        .361424
+95%     3.326764       5.210877       Skewness       1.849511
+99%     4.467415        6.45978       Kurtosis       11.25596
+
+. global cmean = `r(mean)'
+
+. global csd = `r(sd)'
+
+. 
+. di $cmean
+2.2637623
+
+. di $csd
+.60118547
+
+. 
+. use tempdat, clear
+
+. keep if firstyear >= 2008 & firstyear <= 2013 
+(442 observations deleted)
+
+. 
+. foreach v of varlist costbnef_permw costsnl_permw costgoogle_permw st_cost1603_permw {
+  2.         gen sd_`v' = abs(`v' - $cmean)/$csd
+  3. }
+(376 missing values generated)
+(465 missing values generated)
+(498 missing values generated)
+(265 missing values generated)
+
+. 
+. sum sd*, detail
+
+                      sd_costbnef_permw
+-------------------------------------------------------------
+      Percentiles      Smallest
+ 1%     .0154683       .0004647
+ 5%     .0471058       .0154683
+10%     .0997425       .0173705       Obs                 141
+25%     .1948273       .0188069       Sum of Wgt.         141
+
+50%     .4953054                      Mean           .7215841
+                        Largest       Std. Dev.      .7870489
+75%     .9842818       3.048376
+90%     1.530038       3.665512       Variance        .619446
+95%     1.852524       4.360664       Skewness       2.605592
+99%     4.360664       4.902172       Kurtosis       11.94142
+
+                      sd_costsnl_permw
+-------------------------------------------------------------
+      Percentiles      Smallest
+ 1%     .0270693       .0270693
+ 5%     .0548159       .0320662
+10%     .0845327       .0548159       Obs                  52
+25%     .2827861       .0653782       Sum of Wgt.          52
+
+50%     .5752107                      Mean            .690819
+                        Largest       Std. Dev.      .5923686
+75%     .9994626       1.678378
+90%     1.306075       1.980816       Variance       .3509005
+95%     1.980816       2.601156       Skewness       1.518709
+99%     2.639259       2.639259       Kurtosis       5.464662
+
+                     sd_costgoogle_permw
+-------------------------------------------------------------
+      Percentiles      Smallest
+ 1%     .1822398       .1822398
+ 5%     .1822398       .2463723
+10%     .2463723       .2494135       Obs                  19
+25%     .3524569         .29565       Sum of Wgt.          19
+
+50%     .9957743                      Mean            1.18795
+                        Largest       Std. Dev.      1.078926
+75%     1.636427        1.64457
+90%     2.979529       1.732695       Variance       1.164081
+95%     4.543854       2.979529       Skewness       1.773562
+99%     4.543854       4.543854       Kurtosis       6.132278
+
+                    sd_st_cost1603_permw
+-------------------------------------------------------------
+      Percentiles      Smallest
+ 1%     .0170816       .0036368
+ 5%     .0657617       .0095514
+10%     .1257894       .0170816       Obs                 252
+25%     .2565575       .0214854       Sum of Wgt.         252
+
+50%     .4504058                      Mean           .6184982
+                        Largest       Std. Dev.      .6797656
+75%     .7808712       3.096181
+90%     1.193421       3.187725       Variance       .4620813
+95%     1.753157       3.638614       Skewness       4.495694
+99%     3.187725       6.979572       Kurtosis       35.24201
+
+. 
+. * FOR CASES WHERE WE HAVE MULTIPLE ESTIMATES, IGNORE OUTLIERS
+. gen cost_mw = st_cost1603_permw if sd_st_cost1603_permw < 2
+(274 missing values generated)
+
+. 
+. egen cost_private_permw = rowmean(costbnef_permw costsnl_permw)
+(351 missing values generated)
+
+. replace cost_private_permw = costbnef_permw if sd_costbnef_permw < 2 & sd_costsnl_perm
+> w >= 2
+(0 real changes made)
+
+. replace cost_private_permw = costsnl_permw if sd_costbnef_permw >= 2 & sd_costsnl_perm
+> w < 2
+(1 real change made)
+
+. replace cost_private_permw = . if sd_costbnef_permw >= 2 & sd_costsnl_permw >= 2
+(6 real changes made, 6 to missing)
+
+. replace cost_private_permw = costgoogle_permw if cost_private_permw == . & sd_costgoog
+> le_permw < 2
+(11 real changes made)
+
+. 
+. replace cost_mw = cost_private_permw if cost_mw == .
+(83 real changes made)
+
+. 
+. di _N
+517
+
+. sum cost_mw, detail
+
+                           cost_mw
+-------------------------------------------------------------
+      Percentiles      Smallest
+ 1%     1.373999        1.23995
+ 5%      1.59465       1.299656
+10%     1.703358         1.3518       Obs                 326
+25%     1.905112       1.373999       Sum of Wgt.         326
+
+50%     2.109524                      Mean           2.169348
+                        Largest       Std. Dev.      .3976557
+75%     2.378008       3.317735
+90%      2.76368       3.326764       Variance       .1581301
+95%     2.954448       3.342458       Skewness       .5859003
+99%     3.317735        3.36565       Kurtosis        3.35125
+
+. 
+. egen mf_num = group(turbinemanufacturer)
+
+. gen turbine_cap = powercurve_max_cap / 1000
+
+. 
+. gen nturbines = first_nameplate_capacity/ first_turbsize 
+
+. gen log_nturbines = log(nturbines)
+
+. gen log_cap = log(first_nameplate_capacity)
+
+. 
+. gen costsample = 1
+
+. replace costsample = 0 if multiple_grants == 1
+(17 real changes made)
+
+. replace costsample = 0 if state=="AK" | state=="HI"
+(9 real changes made)
+
+. replace costsample = 0 if public == 1
+(31 real changes made)
+
+. replace costsample = 0 if flag_iou_ipp ==0 // Drop commercial and industrial facilitie
+> s
+(30 real changes made)
+
+. save regdat, replace
+(note: file regdat.dta not found)
+file regdat.dta saved
+
+. 
+. use regdat, clear
+
+. local tv = _N
+
+. file open myfile using "$repodir/output/estimates/N_cost_population.tex", write text r
+> eplace 
+
+. file write myfile "`tv'"
+
+. file close myfile
+
+. 
+. *keep if insample // this removes 2013 plants
+. keep if costsample & cost_mw != . 
+(233 observations deleted)
+
+. local tv = _N
+
+. file open myfile using "$repodir/output/estimates/N_cost_regsample.tex", write text re
+> place 
+
+. file write myfile "`tv'"
+
+. file close myfile
+
+. 
+. keep if flag_1603 == 0
+(205 observations deleted)
+
+. local tv = _N
+
+. file open myfile using "$repodir/output/estimates/N_cost_regsample_PTC.tex", write tex
+> t replace 
+
+. file write myfile "`tv'"
+
+. file close myfile
+
+. 
+. use regdat, clear
+
+. keep if costsample 
+(87 observations deleted)
+
+. 
+. la var log_cap "Log(Capacity)"
+
+. la var turbine_cap "Turbine Capacity"
+
+. 
+. qui{
+
+. 
+. esttab, keep(flag_1603 log_cap turbine_cap)     ///
+>         s(MFfes statefes r2_a N rmse, ///
+>         label("Manufacturer FE" "State FE" "adj R-sq." "N" )) ///
+>         se noconstant nonumbers label star(* 0.10 ** 0.05 *** 0.01)
+
+------------------------------------------------------------------------------------
+                          cost_mw         cost_mw         cost_mw         cost_mw   
+------------------------------------------------------------------------------------
+1603 Grant                 0.0755        0.000565          0.0223         0.00737   
+                         (0.0580)        (0.0567)        (0.0549)        (0.0590)   
+
+Log(Capacity)                             -0.0957***       -0.114***      -0.0887***
+                                         (0.0206)        (0.0188)        (0.0214)   
+
+Turbine Capacity                                            0.122**        0.0423   
+                                                         (0.0614)        (0.0752)   
+------------------------------------------------------------------------------------
+Manufacturer FE                                                 Y               Y   
+State FE                                                                        Y   
+adj R-sq.                  0.0855           0.174           0.395           0.489   
+N                             284             284             284             284   
+rmse                        0.355           0.337           0.289           0.265   
+------------------------------------------------------------------------------------
+Standard errors in parentheses
+* p<0.10, ** p<0.05, *** p<0.01
+
+.         
+.         
+. *EXPORT TABLE
+. esttab using "$outdir/tables/cost_prediction.tex" , ///
+>         se noconstant label star(* 0.10 ** 0.05 *** 0.01) replace  ///
+>         keep(flag_1603 log_cap turbine_cap)     ///
+>         nonotes compress booktabs b(a2) ///
+>         s(MFfes statefes r2_a N rmse, ///
+>                 label("Manufacturer FE" "State FE" "adj R-sq." "N" )) ///
+>         nomtitles       
+(output written to C:\GitDir\Projects\ags_capital_vs_output/output/tables/cost_predictio
+> n.tex)
+
+. 
+. * PREDICT COSTS (for cost effectiveness calculation)
+. 
+. use regdat, clear
+
+. 
+. qui: reg cost_mw i.firstyear flag_1603 log_cap i.mf_num turbine_cap i.snum if costsamp
+> le, robust
+
+. 
+. predict cost_mw_est 
+(option xb assumed; fitted values)
+
+. 
+. keep facilityid cost_mw* costsample
+
+. 
+. save $repodir/generated_data/cost_estimates, replace
+file C:\GitDir\Projects\ags_capital_vs_output/generated_data/cost_estimates.dta saved
+
+. 
+. ********************************************************************************
+. tempsetup
+C:\GitDir\Projects\ags_capital_vs_output\temp
+
+. capture log close

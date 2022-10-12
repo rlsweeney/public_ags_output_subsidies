@@ -1,0 +1,119 @@
+------------------------------------------------------------------------------
+      name:  <unnamed>
+       log:  C:\GitDir\Projects\ags_capital_vs_output/output/logs/wind_variabl
+> e_selection.txt
+  log type:  text
+ opened on:  14 Jul 2022, 09:10:45
+
+. ****************************************************************************
+> ****
+. 
+. use $repodir/generated_data/panel_reg_data, clear
+
+. keep if insample
+(29,480 observations deleted)
+
+. keep if insample_cov
+(2,714 observations deleted)
+
+. keep if firstyear < 2013 & firstyear > 2004
+(6,220 observations deleted)
+
+. 
+. clonevar date = ymdate
+
+. * RESTRICT TO BALANCED PANEL
+. keep if year>=2013
+(17,015 observations deleted)
+
+. 
+. xi i.state i.windclass_eia i.date i.nercnum i.year i.month i.off_cat_num i.o
+> tt i.iso_rto_code, prefix(_D) noomit
+
+. 
+. drop if age == 0
+(20 observations deleted)
+
+. lab var ptnl_cf_adj "Potential Capacity Factor"
+
+. lab var design_windspeed_eia "Design Wind Speed"
+
+. 
+. eststo clear
+
+. qui{
+
+. 
+. esttab, drop(_Dd* _I*) ar2      ///
+>         s(r2_a N, label("Adjusted R-sq." "Observations")) ///
+>         se label star(* 0.10 ** 0.05 *** 0.01) nomtitles
+
+------------------------------------------------------------------------------
+> ----------------------
+                              (1)             (2)             (3)             
+> (4)             (5)   
+------------------------------------------------------------------------------
+> ----------------------
+Design Wind Speed           0.304***      -0.0421         -0.0457         0.00
+> 542                   
+                          (0.104)         (0.106)         (0.105)        (0.09
+> 08)                   
+
+Wind Speed (m/s)                            0.862           2.163             
+>                       
+                                          (3.470)         (3.527)             
+>                       
+
+Wind Speed Squared                          0.910**         0.797*            
+>                       
+                                          (0.418)         (0.419)             
+>                       
+
+Wind Speed Cubed                          -0.0456***      -0.0444***          
+>                       
+                                         (0.0151)        (0.0150)             
+>                       
+
+Var(Wind Speed)                                             0.170             
+>              -0.156*  
+                                                          (0.136)             
+>            (0.0915)   
+
+Potential Capacity~r                                                        0.
+> 619***        0.638***
+                                                                         (0.02
+> 24)        (0.0265)   
+
+Constant                    29.84***       -3.572          -2.507           10
+> .83***        11.92***
+                          (2.264)         (8.216)         (8.970)         (2.2
+> 73)         (1.808)   
+------------------------------------------------------------------------------
+> ----------------------
+Adjusted R-sq.              0.287           0.504           0.505           0.
+> 572           0.572   
+Observations                11140           11140           11140           11
+> 140           11140   
+------------------------------------------------------------------------------
+> ----------------------
+Standard errors in parentheses
+* p<0.10, ** p<0.05, *** p<0.01
+
+. 
+. *EXPORT FOR PAPER
+. esttab using "$repodir/output/tables/wind_covar_justification.tex" , replace
+>  ///
+>         drop(_*) ar2 nonotes compress ///
+>         s(r2_a N, label("Adjusted R-sq." "N")) ///
+>         se label star(* 0.10 ** 0.05 *** 0.01) ///
+>         nomtitles booktabs 
+(output written to C:\GitDir\Projects\ags_capital_vs_output/output/tables/wind
+> _covar_justification.tex)
+
+. 
+. ****************************************************************************
+> ****
+. tempsetup
+C:\GitDir\Projects\ags_capital_vs_output\temp
+
+. capture log close

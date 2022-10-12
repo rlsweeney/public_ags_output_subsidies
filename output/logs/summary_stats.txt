@@ -1,0 +1,377 @@
+------------------------------------------------------------------------------
+      name:  <unnamed>
+       log:  C:\GitDir\Projects\ags_capital_vs_output/output/logs/summary_stat
+> s.txt
+  log type:  text
+ opened on:  14 Jul 2022, 09:10:43
+
+. ****************************************************************************
+> ****
+. 
+. /* COMPARISON OF PROJECT CHARACTERISTICS */
+. 
+. use $repodir/generated_data/panel_reg_data, clear
+
+. 
+. keep if year > 2012 // restrict so wind vars etc are same period 
+(46,744 observations deleted)
+
+. collapse (mean) ptnl_* wind* reg_dummy capacity_factor , by(facilityid)
+
+. merge 1:1 facilityid using $repodir/generated_data/static_reg_data, nogen ke
+> ep(match)
+(label pcurve_match already defined)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                               870  
+    -----------------------------------------
+
+. keep if insample
+(303 observations deleted)
+
+. keep if insample_covars
+(55 observations deleted)
+
+. gen turbinesize = powercurve_max_cap/1000
+
+. save crossdata, replace 
+(note: file crossdata.dta not found)
+file crossdata.dta saved
+
+. 
+. 
+. global vlist first_nameplate turbinesize design_windspeed reg_dummy ipp_dumm
+> y ppa_dummy ptnl_cf_adj capacity_factor subsidynum
+
+. global rnames "Nameplate Capacity (MW)" "Turbine Size (MW)" "Design Wind Spe
+> ed (MPH)" "Regulated" "IPP"  "PPA" "Potential Capacity Factor" "Capacity Fac
+> tor" "New Wind Farms"
+
+. *COMPARE PTC VS 1603
+. quietly{
+
+. frmttable using "$outdir/tables/ttest_PTCvs1603.tex", statmat(T) varlabels r
+> eplace ///
+>         ctitle("", PTC, 1603, Difference, "p-value") hlines(11{0}11) spacebe
+> f(1{0}1) frag tex ///
+>         sdec(2,2,2,2 \ 2,2,2,2 \ 2,2,2,2 \ 2,2,2,2 \ 2,2,2,2 \ 2,2,2,2 \ 2,2
+> ,2,2 \ 2,2,2,2  \ 0,0,0,0)
+
+      -----------------------------------------------------------------
+                                    PTC    1603   Difference  p-value 
+      -----------------------------------------------------------------
+       Nameplate Capacity (MW)     102.27  92.03    10.24      0.30   
+       Turbine Size (MW)            1.84   1.91     -0.07      0.20   
+       Design Wind Speed (MPH)     17.81   17.33     0.48      0.27   
+       Regulated                    0.23   0.03      0.20      0.00   
+       IPP                          0.68   0.89     -0.21      0.00   
+       PPA                          0.67   0.86     -0.19      0.00   
+       Potential Capacity Factor   39.59   34.83     4.76      0.00   
+       Capacity Factor             36.76   30.61     6.15      0.00   
+       New Wind Farms               107     192                       
+      -----------------------------------------------------------------
+
+
+. 
+. *COMPARE PTC VS 1603 IN 2009 ONLY
+. quietly{
+
+. frmttable using "$outdir/tables/ttest_PTCvs1603_2009.tex", statmat(T) varlab
+> els replace ///
+>         ctitle("", PTC, 1603, Difference, "p-value") hlines(11{0}11) spacebe
+> f(1{0}1) frag tex ///
+>         sdec(2,2,2,2 \ 2,2,2,2 \ 2,2,2,2 \ 2,2,2,2 \ 2,2,2,2 \ 2,2,2,2 \ 2,2
+> ,2,2 \ 2,2,2,2  \ 0,0,0,0)
+
+      ------------------------------------------------------------------
+                                    PTC     1603   Difference  p-value 
+      ------------------------------------------------------------------
+       Nameplate Capacity (MW)     103.68  114.33    -10.65     0.59   
+       Turbine Size (MW)            1.86    1.79      0.07      0.49   
+       Design Wind Speed (MPH)     18.02   17.23      0.78      0.34   
+       Regulated                    0.27    0.04      0.23      0.00   
+       IPP                          0.69    0.84     -0.15      0.13   
+       PPA                          0.65    0.78     -0.13      0.22   
+       Potential Capacity Factor   40.26   35.70      4.56      0.03   
+       Capacity Factor             35.79   29.84      5.95      0.00   
+       New Wind Farms                26      51                        
+      ------------------------------------------------------------------
+
+
+. 
+. *COMPARE PTC VS 1603 IN 2012 ONLY
+. quietly{
+
+. frmttable using "$outdir/tables/ttest_PTCvs1603_2012.tex", statmat(T) varlab
+> els replace ///
+>         ctitle("", PTC, 1603, Difference, "p-value") hlines(11{0}11) spacebe
+> f(1{0}1) frag tex ///
+>         sdec(2,2,2,2 \ 2,2,2,2 \ 2,2,2,2 \ 2,2,2,2 \ 2,2,2,2 \ 2,2,2,2 \ 2,2
+> ,2,2 \ 2,2,2,2  \ 0,0,0,0)
+
+      -----------------------------------------------------------------
+                                    PTC    1603   Difference  p-value 
+      -----------------------------------------------------------------
+       Nameplate Capacity (MW)     102.68  91.52    11.16      0.51   
+       Turbine Size (MW)            1.83   2.08     -0.25      0.00   
+       Design Wind Speed (MPH)     17.40   17.69    -0.29      0.61   
+       Regulated                    0.17   0.07      0.09      0.13   
+       IPP                          0.74   0.89     -0.15      0.04   
+       PPA                          0.76   0.84     -0.08      0.32   
+       Potential Capacity Factor   40.62   34.28     6.34      0.00   
+       Capacity Factor             38.23   30.77     7.45      0.00   
+       New Wind Farms                54     55                        
+      -----------------------------------------------------------------
+
+
+. 
+. ******************************************************************
+. *COMPARE 2008 VS 2009
+. quietly {
+
+. 
+. frmttable using "$outdir/tables/ttest_2008vs2009.tex", statmat(T) varlabels 
+> replace ///
+>         ctitle("", 2008, 2009, Difference, "p-value") hlines(11{0}101) space
+> bef(1{0}10) frag tex ///
+>         sdec(2,2,2,2 \ 2,2,2,2 \ 2,2,2,2 \ 2,2,2,2 \ 2,2,2,2 \ 2,2,2,2 \ 2,2
+> ,2,2 \ 2,2,2,2 \ 0,0,0,0 \ 0,0,0,0) 
+
+      -----------------------------------------------------------------
+                                   2008    2009   Difference  p-value 
+      -----------------------------------------------------------------
+       Nameplate Capacity (MW)     85.97  110.73    -24.77     0.05   
+       Turbine Size (MW)           1.82    1.81      0.00      0.95   
+       Design Wind Speed (MPH)     18.01  17.50      0.52      0.29   
+       Regulated                   0.13    0.12      0.01      0.81   
+       IPP                         0.58    0.79     -0.21      0.01   
+       PPA                         0.75    0.74      0.01      0.85   
+       Potential Capacity Factor   37.50  37.24      0.27      0.84   
+       Capacity Factor             34.47  31.85      2.62      0.01   
+       New Wind Farms               69      77                        
+       1603 Recipients               0      51                        
+      -----------------------------------------------------------------
+
+
+. 
+. ******************************************************************
+. *SHARE OF 2008-2009 PLANTS USING THE SAME TURBINES
+. use crossdata, clear
+
+. keep if firstyear==2008 | firstyear==2009
+(366 observations deleted)
+
+. bys turbnum: egen minyear = min(firstyear)
+
+. bys turbnum: egen maxyear = max(firstyear)
+
+. count if minyear!=maxyear
+  120
+
+. gen minmax = 0
+
+. replace minmax = 1 if minyear!=maxyear
+(120 real changes made)
+
+. summarize minmax, meanonly
+
+. local stat = round(`r(mean)'*100)
+
+. file open myfile using "$repodir/output/estimates/stat_pct_same_turbines.tex
+> ", write text replace 
+
+. file write myfile "`stat'"
+
+. file close myfile
+
+. 
+. ****************************************************************************
+> ****  nocenter
+. *CREATE SUMMARY STATS TABLE FOR ALL YEARS TO SHOW TRENDS
+. use $repodir/generated_data/panel_reg_data, clear
+
+. keep if inrange(firstyear,2002,2014)
+(21,695 observations deleted)
+
+. keep if year == 2014
+(36,400 observations deleted)
+
+. 
+. collapse (mean) ptnl_* wind* reg_dummy capacity_factor, by(facilityid)
+
+. merge 1:1 facilityid using $repodir/generated_data/static_reg_data, nogen ke
+> ep(match)
+(label pcurve_match already defined)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                               730  
+    -----------------------------------------
+
+. 
+. replace flag_1603 = 0 if firstyear < 2009 // *ADDED FOOTNOTE IN TEXT THESE A
+> RE EXCLUDED (insample==0)
+(7 real changes made)
+
+. *Export Table to Latex
+. gen N = 1
+
+. tabout firstyear using "$outdir/tables/annual_sum_stats.tex", replace ///
+> c(sum N sum insample_covars sum flag_1603 ///
+>         mean flag_iou_ipp mean reg_dummy /// 
+>         mean first_nameplate mean first_turbsize mean design_windspeed mean 
+> capacity_factor) sum ///
+> f(0c 0c 0c 2.2c) ///
+> style(tex) bt ///
+> topf($repodir/code/analysis/top.tex) topstr(\textwidth) ptotal(none) total(n
+> one) botf($repodir/code/analysis/bot.tex) ///
+> h1(nil) ///
+> h2(nil) ///
+> h3(Year & Plants (all) & Plants (sample) & Plants (1603) & IOU or IPP & Regu
+> lated & Capacity & Turbine Size & Wind Speed & Capacity Factor \\ ) wide(5)
+
+Table output written to: C:\GitDir\Projects\ags_capital_vs_output/output/table
+> s/annual_sum_stats.tex
+
+\begin{center}
+\footnotesize
+\newcolumntype{Y}{>{\raggedleft\arraybackslash}X}
+\begin{tabularx} {\textwidth} {@{} l Y Y Y Y Y Y Y Y Y Y Y Y Y Y Y Y@{}} \\
+\toprule
+Year & Plants (all) & Plants (sample) & Plants (1603) & IOU or IPP & Regulated
+>  & Capacity & Turbine Size & Wind Speed & Capacity Factor \\
+\midrule
+2002&12&9&0&0.75&0.33&48.46&1.21&17.97&29.83 \\
+2003&36&29&0&0.86&0.08&44.93&1.33&18.64&31.34 \\
+2004&14&9&0&0.86&0.21&26.89&1.49&17.69&32.33 \\
+2005&23&17&0&0.74&0.17&92.38&1.50&18.59&35.38 \\
+2006&44&36&0&0.93&0.14&43.08&1.44&17.86&34.91 \\
+2007&52&44&0&0.94&0.12&105.65&1.77&18.48&35.74 \\
+2008&95&69&0&0.95&0.15&84.74&1.80&17.89&34.48 \\
+2009&103&77&65&0.84&0.17&91.70&1.81&17.65&31.85 \\
+2010&62&49&44&0.89&0.08&67.50&1.76&17.02&32.12 \\
+2011&91&64&62&0.80&0.13&74.47&1.92&17.22&31.15 \\
+2012&149&109&74&0.93&0.11&87.77&1.99&17.22&34.33 \\
+2013&11&0&0&0.73&0.09&71.64&1.75&18.14&34.86 \\
+2014&38&0&0&0.84&0.16&92.59&1.82&18.59&31.30 \\
+\bottomrule
+\addlinespace[.75ex]
+\end{tabularx}
+\par
+\normalsize
+%\scriptsize{\emph{Source: }#}
+\end{center}
+
+. 
+. ****************************************************************************
+> ****
+. *PLOT OF ENTRANTS OVER TIME
+. 
+. use $repodir/generated_data/static_reg_data, clear
+
+. *gen firstdate = first_gen_date 
+. gen firstdate = ym(year(ope_date_min),month(ope_date_min))
+
+. 
+. // GENERATE ENTRY PLOT USING EIA 923 DATA IN STYLE OF RD PLOTS
+. bys firstdate: egen number = count(facilityid)
+
+. twoway bar number firstdate if firstdate>=ym(2002,1) & firstdate<=ym(2012,12
+> ), ///
+>         tline(2009m1)  ///
+>         xtitle("Month Placed in Service") ytitle("New Wind Farms") xlabel(50
+> 4(24)636 , format(%tm_CCYY)) ///
+>         xtick(516(24)624) /// title("Number of Entrants around Policy Discon
+> tinuity")
+>         note("Vertical line denotes availability of 1603 cash grant for wind
+>  farms entering after January 1, 2009.")
+
+. graph export "$outdir/figures/investments_vs_time.png", replace
+(file C:\GitDir\Projects\ags_capital_vs_output/output/figures/investments_vs_t
+> ime.png written in PNG format)
+
+. drop number
+
+. 
+. 
+. ****************************************************************************
+> ****
+. *CREATE DENSITY GRAPHS
+. use $repodir/generated_data/panel_reg_data, clear
+
+. drop if year < 2013
+(46,744 observations deleted)
+
+. keep if insample
+(6,249 observations deleted)
+
+. keep if insample_covars 
+(1,308 observations deleted)
+
+. 
+. local meanvars ptnl_cf_adj wind_speed* nameplate turbsize capacity_factor 
+
+. collapse (mean) `meanvars' (min) min_reg_dummy = reg_dummy ///
+>         (lastnm) ppa_dummy entnum windclass_eia, by(facilityid)
+
+. merge 1:1 facilityid using $repodir/generated_data/static_reg_data, nogen ke
+> ep(match) 
+(label pcurve_match already defined)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                               512  
+    -----------------------------------------
+
+. 
+. local yv capacity_factor 
+
+. twoway  (kdensity `yv' if firstyear > 2008  & flag_1603==0, legend(lab(1 "Po
+> st-PTC"  )) lwidth(medthick) lcolor(red)  )  ///
+>                 (kdensity `yv' if firstyear > 2008  & flag_1603==1, legend(l
+> ab(2 "Post-1603" )) lwidth(medthick) lcolor(blue) ), ///
+>          title("Average Capacity Factor by Subsidy Choice - Post 2008") ///
+>          note("Capacity factors averaged over 2013-2014 for all cohorts.") /
+> //
+>          ylabel(0(.02).07) ytitle("Density") xtitle("Capacity Factor") schem
+> e(s1color)
+
+. graph export "$outdir/figures/kdensity_capacity_factor_by_subsidy_post.png",
+>  replace
+(file C:\GitDir\Projects\ags_capital_vs_output/output/figures/kdensity_capacit
+> y_factor_by_subsidy_post.png written in PNG format)
+
+. 
+. local yv capacity_factor
+
+. twoway  (kdensity `yv' if firstyear > 2008  & flag_1603==0, legend(lab(1 "Po
+> st-PTC"  ))                 lwidth(medthick) lcolor(red)   )  ///
+>                 (kdensity `yv' if firstyear > 2008  & flag_1603==1, legend(l
+> ab(2 "Post-1603" ))                 lwidth(medthick) lcolor(blue)  )  ///
+>                 (kdensity `yv' if firstyear < 2009,                         
+>             legend(lab(3 "Pre-PTC" ) rows(1))       lwidth(medthick) lcolor(
+> green) ), ///
+>          title("Average Capacity Factor by Subsidy Choice") ///
+>          note("Capacity factors averaged over 2013-2014 for all cohorts.") /
+> //
+>          ylabel(0(.02).07) ytitle("Density") xtitle("Capacity Factor") schem
+> e(s1color)
+
+. graph export "$outdir/figures/kdensity_capacity_factor_by_subsidy.png", repl
+> ace
+(file C:\GitDir\Projects\ags_capital_vs_output/output/figures/kdensity_capacit
+> y_factor_by_subsidy.png written in PNG format)
+
+. 
+. ****************************************************************************
+> ****
+. cap graph close
+
+. tempsetup
+C:\GitDir\Projects\ags_capital_vs_output\temp
+
+. capture log close

@@ -1,0 +1,126 @@
+{smcl}
+{com}{sf}{ul off}{txt}{.-}
+      name:  {res}<unnamed>
+       {txt}log:  {res}C:\GitDir\Projects\ags_capital_vs_output/output/logs/make_maps.txt
+  {txt}log type:  {res}smcl
+ {txt}opened on:  {res}14 Jul 2022, 09:10:37
+{txt}
+{com}. ********************************************************************************
+. 
+. ********************************************************************************
+. * this code uses spmap, shp2dta, and mif2dta
+. //ssc install spmap
+. //ssc install shp2dta
+. //ssc install mif2dta
+. * see http://www.stata.com/support/faqs/graphics/spmap-and-maps/ for more information
+. ********************************************************************************
+. 
+. /* DOWNLOAD SHAPEFILES - this only needs to be done once */
+. * source: 2014 NOAA States and Territories shapefile
+. * http://www.nws.noaa.gov/geodata/catalog/national/html/us_state.htm
+. * retrieved March 13, 2015 @ 4:30 PM
+. 
+. /* CONVERT SHAPEFILES FOR SPMAP - this only needs to be done once 
+> * cd "$dropbox/Analysis/Results/mapping"
+> * shp2dta using s_16de14, database(statesdb) coordinates(statescoord)
+> use statesdb, clear
+> save $repodir/generated_data/statesdb, replace
+> use statescoord, clear
+> save $repodir/generated_data/statescoord, replace
+> */
+. 
+. ** BRING IN DATA
+. use $repodir/generated_data/panel_reg_data, clear
+{txt}
+{com}. keep if insample
+{txt}(29,480 observations deleted)
+
+{com}. rename eia_lat turbinelat
+{res}{txt}
+{com}. rename eia_lon turbinelong
+{res}{txt}
+{com}. gen firstmonth = month(ope_date_min)
+{txt}
+{com}. * collapse data to cross-section (locations, 1603 flag, firstyear, and firstmonth are unique)
+. collapse turbinelat turbinelong flag_1603 nameplate firstyear firstmonth, by(facilityid state)
+{txt}
+{com}. gen STATE = state //decode state, gen(STATE)
+{txt}
+{com}. * merge to shapefile databaste and eliminate AK, HI, and territories from data
+. merge m:1 STATE using "$repodir/generated_data/statesdb"
+{res}
+{txt}{col 5}Result{col 38}# of obs.
+{col 5}{hline 41}
+{col 5}not matched{col 30}{res}              20
+{txt}{col 9}from master{col 30}{res}               0{txt}  (_merge==1)
+{col 9}from using{col 30}{res}              20{txt}  (_merge==2)
+
+{col 5}matched{col 30}{res}             567{txt}  (_merge==3)
+{col 5}{hline 41}
+
+{com}. drop if FIPS=="02" | FIPS=="60" | FIPS=="66" | FIPS=="15" | FIPS=="72" | FIPS=="78"
+{txt}(6 observations deleted)
+
+{com}. drop _merge
+{txt}
+{com}. gen id = _n
+{txt}
+{com}. * create labels for legend
+. label define vals1603 0 "PTC" 1 "1603"
+{txt}
+{com}. lab val flag_1603 vals1603
+{txt}
+{com}. * generate and save maps - pre-period vs. policy-period PTC vs. 1603
+. gen cat = .
+{txt}(581 missing values generated)
+
+{com}. replace cat = 0 if firstyear<=2008
+{txt}(224 real changes made)
+
+{com}. replace cat = 1 if inrange(firstyear,2009,2012) & flag_1603==0
+{txt}(126 real changes made)
+
+{com}. replace cat = 2 if inrange(firstyear,2009,2012) & flag_1603==1
+{txt}(217 real changes made)
+
+{com}. * create labels for legend
+. label define cats 0 "Pre-Policy: PTC" 1 "Policy: PTC" 2 "Policy: 1603"
+{txt}
+{com}. lab val cat cats
+{txt}
+{com}. * flatten gradient for scaling shape size
+. gen log_cap = log(nameplate_capacity) + 1
+{txt}(14 missing values generated)
+
+{com}. 
+. * full 1603 period sample - color
+. spmap using $repodir/generated_data/statescoord, id(id) ///
+>         point(x(turbinelong) y(turbinelat) proportional(log_cap) ///
+>         select(keep if firstyear>=2009 & firstyear<=2012) ///
+>         by(cat) shape(Dh Oh) ocolor(midblue red) osize(medthick medthick) size(*0.5) legenda(on) ) ///
+>         legend(size(*2) rowgap(1.2)) ///
+>         note("Note: Marker sizes are proportional to log generating capacity.")
+{res}{txt}
+{com}. graph export "$outdir/figures/map_2009to2012.png", as(png) width(900) replace
+{txt}(file C:\GitDir\Projects\ags_capital_vs_output/output/figures/map_2009to2012.png written in PNG format)
+
+{com}. 
+. * baseline bandwidth - color
+. spmap using $repodir/generated_data/statescoord, id(id) ///
+>         point(x(turbinelong) y(turbinelat) proportional(log_cap) ///
+>         select(keep if firstyear>=2008 & firstyear<=2009) ///
+>         by(cat) shape(+ Dh Oh) ocolor(green midblue red) osize(medthick medthick medthick) size(*0.65) legenda(on) ) ///
+>         legend(size(*2) rowgap(1.2)) ///
+>         note("Note: Marker sizes are proportional to log generating capacity.")
+{res}{txt}
+{com}. graph export "$outdir/figures/map_2008to2009.png", as(png) width(900) replace
+{txt}(file C:\GitDir\Projects\ags_capital_vs_output/output/figures/map_2008to2009.png written in PNG format)
+
+{com}. 
+. ********************************************************************************
+. tempsetup
+{res}C:\GitDir\Projects\ags_capital_vs_output\temp
+{txt}
+{com}. capture log close
+{smcl}
+{com}{sf}{ul off}

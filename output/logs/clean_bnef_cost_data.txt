@@ -1,0 +1,278 @@
+------------------------------------------------------------------------------------------
+      name:  <unnamed>
+       log:  D:\GitDir\Projects\ags_capital_vs_output/output/logs/clean_bnef_cost_data.txt
+  log type:  text
+ opened on:  13 Jul 2022, 08:50:21
+
+. ********************************************************************************
+. 
+. /*******************************************************************************/
+. *IMPORT EXTERNAL COST ESTIMATES 
+. 
+. * GOOGLE COST DATA
+. import delimited $dropbox/Data/public/USplants_Costs_GoogleSearch.csv, clear 
+(22 vars, 1,118 obs)
+
+. destring costestimate, gen(CostGoogle) force
+costestimate: contains nonnumeric characters; CostGoogle generated as double
+(1056 missing values generated)
+
+. rename costflag CostGoogle_Flag
+
+. destring plantcode, gen(facilityid) force
+plantcode: contains nonnumeric characters; facilityid generated as long
+(6 missing values generated)
+
+. keep facilityid CostGoogle* facilityid 
+
+. keep if CostGoogle_Flag == .5 | CostGoogle_Flag == 1
+(1,078 observations deleted)
+
+. save costs_google, replace
+(note: file costs_google.dta not found)
+file costs_google.dta saved
+
+. 
+. *IMPORT BNEF DATA 
+. ** PLANT STACK 
+. import excel "$dropbox/Data/proprietary/bnef/2020-02-03 - U.S. Power Plant Stack Raw Dat
+> a and User Guide.xlsx", ///
+>         firstrow clear cellrange(B7) sheet("Generator Data")
+
+. save indata, replace
+(note: file indata.dta not found)
+file indata.dta saved
+
+. 
+. use indata, clear
+
+. keep if tech == "Wind"
+(31,228 observations deleted)
+
+. rename plantid facilityid 
+
+. rename windturbinehubheight HubHeight_bnef 
+
+. rename windnumberofturbines NumTurbines_bnef
+
+. rename windpredominantturbinemanufac TurbineFirm_bnefStack
+
+. rename windpredominantturbinemodel TurbineModel_bnefStack
+
+. 
+. keep bnefwebsiteid *_bnef* facilityid 
+
+. 
+. foreach v of varlist bnefwebsiteid HubHeight NumTurbines facilityid {
+  2.         destring `v', replace force
+  3. }
+bnefwebsiteid: contains nonnumeric characters; replaced as long
+(580 missing values generated)
+HubHeight_bnef: contains nonnumeric characters; replaced as double
+(858 missing values generated)
+NumTurbines_bnef: contains nonnumeric characters; replaced as double
+(857 missing values generated)
+facilityid: all characters numeric; replaced as long
+
+. 
+. save bnef_stack, replace
+(note: file bnef_stack.dta not found)
+file bnef_stack.dta saved
+
+. 
+. ** PPAs
+. import excel "$dropbox/Data/proprietary/bnef/2018-12-19 - U.S. Renewable PPA Prices Hit 
+> Record Lows in 2018.xlsm", ///
+>         firstrow clear cellrange(D10) sheet("PPA prices and contract details")
+
+. keep if tech == "Wind"
+(230 observations deleted)
+
+.         
+. rename offtake_priceMWh PPAPrice
+
+. rename capacityMW PPACapacity
+
+. 
+. gen capp = PPACapacity*PPAPrice
+
+. 
+. collapse (median) PPA_bnef_median = PPAPrice (mean) PPA_bnef_mean = PPAPrice ///
+>                 (sum) PPACapacity capp (count) nPPAs_bnef = PPAPrice (max) PPA_bnef_max 
+> = PPAPrice, ///
+>                 by(plant_id)
+
+.                 
+. gen PPA_bnef_wgt = capp/PPACapacity
+
+. drop capp 
+
+. 
+. rename plant_id facilityid 
+
+. save bnef_ppas, replace
+(note: file bnef_ppas.dta not found)
+file bnef_ppas.dta saved
+
+. 
+. 
+. ** BNEF PROJECT COSTS
+. import excel "$dropbox/Data/proprietary/bnef/renewableProject_NorthAmericaCarribean.xlsx
+> ", ///
+>         firstrow clear cellrange(A14)
+
+. rename RenewableProjectID bnefwebsiteid 
+
+. rename CapacitytotalMWe Capacity_bnef
+
+. rename TotalValuem Cost_bnef 
+
+. keep if Country =="United States"
+(755 observations deleted)
+
+. 
+. keep bnefwebsiteid Capacity_bnef Cost_bnef 
+
+. save bnef_costs, replace
+(note: file bnef_costs.dta not found)
+file bnef_costs.dta saved
+
+. 
+. 
+. use bnef_stack, clear
+
+. *KEEP BIGGEST UNIT 
+. gsort bnefwebsite -NumTurbines
+
+. by bnefwebsite: gen tn = _n
+
+. keep if tn ==1 
+(934 observations deleted)
+
+. drop tn
+
+. merge 1:1 bnefwebsiteid using bnef_costs, nogen keep(match master) 
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                            48
+        from master                        48  
+        from using                          0  
+
+    matched                             1,429  
+    -----------------------------------------
+
+. 
+. gen ccap = Capacity_bnef if Cost_bnef != . 
+(1,107 missing values generated)
+
+. 
+. collapse (sum) Capacity_bnef Cost_bnef ccap /// 
+>         (count) nBNEFprojects = bnefwebsiteid,  by(facilityid)
+
+. 
+. gen costbnef_permw = Cost_bnef/ccap 
+(1,071 missing values generated)
+
+. drop ccap
+
+. merge 1:1 facilityid using bnef_ppas, nogen keep(match master) 
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                         1,188
+        from master                     1,188  
+        from using                          0  
+
+    matched                               246  
+    -----------------------------------------
+
+. save bnef_all, replace
+(note: file bnef_all.dta not found)
+file bnef_all.dta saved
+
+. 
+. * SNL cost data 
+. import excel "$dropbox/Data/proprietary/snl/SNL_PlantData_Static_20191122_removedblankro
+> ws.xls", ///
+>         firstrow clear
+
+. destring EIASiteCode, force gen(facilityid)
+EIASiteCode: all characters numeric; facilityid generated as long
+(1973 missing values generated)
+
+. destring OperatingCapacityMW, force gen(CapacitySNL)
+OperatingCapacityMW: contains nonnumeric characters; CapacitySNL generated as double
+(1865 missing values generated)
+
+. destring CompletedPhasesProjectCost, force gen(CostSNL) 
+CompletedPhasesProjectCost: contains nonnumeric characters; CostSNL generated as long
+(2718 missing values generated)
+
+. rename CompletedPhasesSNLEstimatedC CostSNL_EstFlag 
+
+. destring CompletedPhasesNetCapacityCh, force gen(CostSNL_Capacity)
+CompletedPhasesNetCapacityCh: contains nonnumeric characters; CostSNL_Capacity generated a
+> s double
+(2619 missing values generated)
+
+. replace CostSNL = CostSNL/1000
+variable CostSNL was long now double
+(683 real changes made)
+
+. gen costsnl_permw = CostSNL/CostSNL_Capacity
+(2,718 missing values generated)
+
+. 
+. keep if CostSNL_EstFlag == "No"
+(3,130 observations deleted)
+
+. drop if costsnl_permw < .5 | costsnl_permw > 10
+(106 observations deleted)
+
+. drop if facilityid == . 
+(52 observations deleted)
+
+. keep Cost* costsnl facilityid 
+
+. 
+. save snl_costs, replace
+(note: file snl_costs.dta not found)
+file snl_costs.dta saved
+
+. 
+. use bnef_all, clear
+
+. merge 1:1 facilityid using snl_costs, nogen
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                         1,353
+        from master                     1,337  
+        from using                         16  
+
+    matched                                97  
+    -----------------------------------------
+
+. merge 1:1 facilityid using costs_google, nogen
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                         1,414
+        from master                     1,412  
+        from using                          2  
+
+    matched                                38  
+    -----------------------------------------
+
+. save $repodir/generated_data/external_data_all, replace
+(note: file D:\GitDir\Projects\ags_capital_vs_output/generated_data/external_data_all.dta 
+> not found)
+file D:\GitDir\Projects\ags_capital_vs_output/generated_data/external_data_all.dta saved
+
+. 
+. ********************************************************************************
+. tempsetup
+D:\GitDir\Projects\ags_capital_vs_output\temp
+
+. capture log close

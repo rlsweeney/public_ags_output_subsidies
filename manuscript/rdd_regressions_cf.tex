@@ -1,0 +1,36 @@
+{
+\def\sym#1{\ifmmode^{#1}\else\(^{#1}\)\fi}
+\begin{tabular}{l*{6}{c}}
+\toprule
+                &\multicolumn{1}{c}{(1)}         &\multicolumn{1}{c}{(2)}         &\multicolumn{1}{c}{(3)}         &\multicolumn{1}{c}{(4)}         &\multicolumn{1}{c}{(5)}         &\multicolumn{1}{c}{(6)}         \\
+\midrule
+1603 Grant      &   -5.148\sym{***}&   -3.626\sym{***}&   -2.842\sym{***}&   -3.697\sym{***}&   -2.893\sym{**} &   -3.156\sym{***}\\
+                &  (0.915)         &  (0.899)         &  (0.829)         &  (1.351)         &  (1.238)         &  (1.170)         \\
+\addlinespace
+Regulated       &                  &   -1.562         &   -5.439\sym{***}&                  &   -1.371         &   -5.446\sym{***}\\
+                &                  &  (1.712)         &  (1.979)         &                  &  (1.685)         &  (1.970)         \\
+\addlinespace
+PPA             &                  &   -0.648         &   -2.608\sym{***}&                  &   -0.600         &   -2.618\sym{***}\\
+                &                  &  (1.048)         &  (0.927)         &                  &  (1.056)         &  (0.925)         \\
+\addlinespace
+IPP             &                  &   -1.350         &   -2.554\sym{*}  &                  &   -1.408         &   -2.514\sym{*}  \\
+                &                  &  (1.333)         &  (1.351)         &                  &  (1.305)         &  (1.307)         \\
+\addlinespace
+Potential Capacity Factor&                  &    0.501\sym{***}&    0.551\sym{***}&                  &    0.503\sym{***}&    0.553\sym{***}\\
+                &                  & (0.0366)         & (0.0391)         &                  & (0.0368)         & (0.0386)         \\
+\addlinespace
+Var(Wind Speed) &                  &   0.0400         &   -0.426\sym{***}&                  &   0.0637         &   -0.432\sym{***}\\
+                &                  &  (0.148)         &  (0.103)         &                  &  (0.155)         &  (0.107)         \\
+\addlinespace
+log(Capacity)   &                  &   -0.567         &    0.571         &                  &   -0.605         &    0.580         \\
+                &                  &  (0.429)         &  (0.471)         &                  &  (0.430)         &  (0.470)         \\
+\midrule
+Regression Type &      OLS         &      OLS         &      OLS         &     2SLS         &     2SLS         &     2SLS         \\
+Controls        &        N         &        Y         &        Y         &        N         &        Y         &        Y         \\
+State FE        &        N         &        N         &        Y         &        N         &        N         &        Y         \\
+R-sq.           &    0.372         &    0.557         &    0.660         &        -         &        -         &        -         \\
+N               &     8752         &     8752         &     8752         &     8752         &     8752         &     8752         \\
+First-stage F-stat.&                  &                  &                  &      148         &      169         &      113         \\
+\bottomrule
+\end{tabular}
+}

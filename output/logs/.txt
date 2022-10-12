@@ -1,0 +1,131 @@
+----------------------------------------------------------------------------------------
+      name:  <unnamed>
+       log:  C:\GitDir\Projects\ags_capital_vs_output/output/logs/.txt
+  log type:  text
+ opened on:  14 Jul 2022, 09:37:02
+
+. ********************************************************************************
+. 
+. /* RUN POLICY EVAL DATA PREP ***************************************************
+> - CLEANS DATA; 
+> - ASSIGNS TE FROM ESTIMATES; 
+> - DEFINES A PROGRAM TO COMPUTE DISCOUNTED PROFITS */
+. 
+. do "$repodir/code/analysis/prep_policyeval.do"
+
+. /*******************************************************************************
+> THIS FILE ARRANGES DATA TO CALCULATE DISCOUNTED PROFITS BY PLANT FOR EACH SUBSIDY
+> 
+> OVERVIEW: 
+> 
+> # DATA PREP
+> - Need to get firm prices (including PPAs and RECs)
+> - Bring in capital costs (and estimates)
+> - Fix / standardize units and collapse 
+> 
+> # PROGRAM PREP
+> - write program that maps this data into discounted profit and q estimates 
+> for different assumptions 
+> ********************************************************************************/
+. local fname prep_policyeval
+
+. 
+. clear
+
+. global repodir = substr("`c(pwd)'",1,length("`c(pwd)'") - (strpos(reverse("`c(pwd)'"),
+> reverse("ags_capital_vs_output"))) + 1)
+
+. do "$repodir/code/setup.do"
+
+. clear
+
+. set more off, permanently
+(set more preference recorded)
+
+. set matsize 1000
+set matsize ignored.
+    Matrix sizes are no longer limited by c(matsize) in modern Statas.  Matrix sizes
+    are now limited by flavor of Stata.  See limits for more details.
+
+. *set scheme s1mono
+. set scheme s1color
+
+. set seed 123456
+
+. 
+. ********************************************************************************
+. * SET PATHS
+. ********************************************************************************
+. global repodir = substr("`c(pwd)'",1,length("`c(pwd)'") - (strpos(reverse("`c(pwd)'"),
+> reverse("ags_capital_vs_output"))) + 1)
+
+. 
+. do "$repodir/code/paths.do"
+
+. global dropbox "C:/Dropbox/projects/Completed_Projects/1603"
+
+. global wind_data_dir "C:/Dropbox/data/wind_speed_data"
+
+. 
+end of do-file
+
+. 
+. global outdir "$repodir/output" // MAY BE USEFUL TO REDIRECT FOR COMPARISONS/ ROBUSTNE
+> SS ETC 
+
+. 
+. global generated_data "$dropbox/generated_data"
+
+. ** can uncomment this if you want to run build code and updated right to the repo
+. ** but these are very slow. alternatively, `move_files.do` copies files run to the rep
+> o
+. global generated_data "$repodir/generated_data" 
+
+. 
+. capture mkdir "$repodir/temp"
+
+. capture mkdir "$repodir/output/estimates"
+
+. 
+. ********************************************************************************
+. * DEFINE PROGRAMS
+. ********************************************************************************
+. *THIS PROGRAM CD'S TO THE TEMP DIRECTORY AND CLEARS IT
+. capture program drop tempsetup
+
+. program define tempsetup
+  1. 
+.         cd "$repodir/temp"
+  2.         local list : dir . files *
+  3.         foreach f of local list {
+  4.                 erase "`f'"
+  5.         }
+  6. end 
+
+. 
+. 
+. *THIS PROGRAM KILLS THE TEMP DIRECTORY
+. capture program drop tempclose
+
+. program define tempclose
+  1.         pause
+  2.         clear
+  3.         cd "$repodir/temp"
+  4.         local list : dir . files *
+  5.         foreach f of local list {
+  6.                 erase "`f'"
+  7.         }
+  8.         cd "$repodir"
+  9.         rmdir "$repodir/temp"
+ 10. end 
+
+. exit 
+
+end of do-file
+
+. 
+. tempsetup
+C:\GitDir\Projects\ags_capital_vs_output\temp
+
+. 
+. capture log close

@@ -1,0 +1,33 @@
+------------------------------------------------------------------------------------------
+      name:  <unnamed>
+       log:  D:\GitDir\Projects\ags_capital_vs_output/output/logs/import_deflators.txt
+  log type:  text
+ opened on:  13 Jul 2022, 08:50:21
+
+. ********************************************************************************
+. 
+. *IMPORT GDP DEFLATOR
+. import excel $dropbox/Data/public/FRED_GDP_Implicit_Price_Deflator.xls, ///
+>         firstrow clear cellrange(A11)
+
+. gen year = year(observation_date)
+
+. keep year deflator2014
+
+. rename deflator2014 gdp_deflator2014
+
+. 
+. order year gdp
+
+. 
+. save $repodir/generated_data/deflators, replace
+(note: file D:\GitDir\Projects\ags_capital_vs_output/generated_data/deflators.dta not foun
+> d)
+file D:\GitDir\Projects\ags_capital_vs_output/generated_data/deflators.dta saved
+
+. 
+. ********************************************************************************
+. tempsetup
+D:\GitDir\Projects\ags_capital_vs_output\temp
+
+. capture log close

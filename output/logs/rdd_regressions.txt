@@ -1,0 +1,787 @@
+------------------------------------------------------------------------------
+      name:  <unnamed>
+       log:  C:\GitDir\Projects\ags_capital_vs_output/output/logs/rdd_regressi
+> ons.txt
+  log type:  text
+ opened on:  14 Jul 2022, 09:10:47
+
+. ****************************************************************************
+> ****
+. 
+. ****************************************************************************
+> ****
+. * PREP DATA 
+. ****************************************************************************
+> ****
+. use $repodir/generated_data/panel_reg_data, clear
+
+. keep if insample_covars
+(32,194 observations deleted)
+
+. * restrict to balanced panel
+. keep if year>=2010
+(8,840 observations deleted)
+
+. 
+. clonevar date = ymdate
+
+. xi i.state i.windclass_eia i.date i.nercnum i.off_cat_num ///
+>         i.ott i.iso_rto_code i.entnum, prefix(_D) noomit
+
+. drop  _Ddate_659 // drop same period in each reg
+
+. drop if age == 0 // output could be for partial month at time 0
+(228 observations deleted)
+
+. replace log_netgen = log(netgen + 1)
+(25,327 real changes made)
+
+. gen log_ptnl_output_adj = log(ptnl_output_adj)
+
+. lab var log_ptnl_output_adj "log(Potential Output)"
+
+. lab var ptnl_cf_adj "Potential Capacity Factor"
+
+. lab var design_windspeed_eia "Design Wind Speed"
+
+. 
+. save regdat_bw, replace
+(note: file regdat_bw.dta not found)
+file regdat_bw.dta saved
+
+. 
+. * restrict sample to firms that began operating between 2008-2009
+. keep if firstyear==2008 | firstyear==2009
+(16,575 observations deleted)
+
+. 
+. save regdat, replace
+(note: file regdat.dta not found)
+file regdat.dta saved
+
+. 
+. use regdat, clear
+
+. * specify regression structure once
+. 
+. global avs _Dd*
+
+. 
+. global covars reg_dummy ppa_dummy ipp_dummy ptnl_cf_adj windvar log_nameplat
+> e 
+
+. 
+. capture program drop estimateregs
+
+. program define estimateregs
+  1.         eststo clear
+  2.         *       ols regressions 
+.         eststo: reg $dv flag_1603 $avs , robust cluster(facilityid)
+  3.                 estadd local regtype "OLS", replace
+  4.                 estadd local state "N", replace
+  5.                 estadd local covars "N", replace
+  6.                 local r2a : di %9.3f e(r2_a)
+  7.                 estadd local r2a `r2a'
+  8.         eststo tk1: reg $dv flag_1603 $avs $covars , cluster(facilityid)
+  9.                 estadd local regtype "OLS", replace
+ 10.                 estadd local state "N", replace
+ 11.                 estadd local covars "Y", replace
+ 12.                 local r2a : di %9.3f e(r2_a)
+ 13.                 estadd local r2a `r2a'
+ 14.         eststo tk2: reg $dv flag_1603 $avs $covars _Dst* , cluster(facili
+> tyid)
+ 15.                 estadd local regtype "OLS", replace
+ 16.                 estadd local state "Y", replace
+ 17.                 estadd local covars "Y", replace
+ 18.                 local r2a : di %9.3f e(r2_a)
+ 19.                 estadd local r2a `r2a'
+ 20.         *       iv regressions  
+.         eststo: ivreg2 $dv (flag_1603 = policy) $avs , cluster(facilityid) p
+> artial($avs ) first
+ 21.                 mat def a = e(first)
+ 22.                 estadd local fstat = round(a[4,1])
+ 23.                 estadd local regtype "2SLS", replace
+ 24.                 estadd local state "N", replace
+ 25.                 estadd local covars "N", replace
+ 26.                 estadd local r2a = "-", replace
+ 27.         eststo tk3: ivreg2 $dv (flag_1603 = policy) $avs $covars , cluste
+> r(facilityid) partial($avs ) first
+ 28.                 mat def a = e(first)
+ 29.                 estadd local fstat = round(a[4,1])
+ 30.                 estadd local regtype "2SLS", replace
+ 31.                 estadd local state "N", replace
+ 32.                 estadd local covars "Y", replace
+ 33.                 estadd local r2a = "-", replace
+ 34.         eststo tk4: ivreg2 $dv (flag_1603 = policy) $avs $covars _Dst* , 
+> cluster(facilityid) partial($avs _Dst*) first
+ 35.                 mat def a = e(first)
+ 36.                 estadd local fstat = round(a[4,1])
+ 37.                 estadd local regtype "2SLS", replace
+ 38.                 estadd local state "Y", replace
+ 39.                 estadd local covars "Y", replace
+ 40.                 estadd local r2a = "-", replace
+ 41. end
+
+. 
+. *******************
+. *CAPACITY FACTOR
+. 
+. * use potential capacity factor
+. global dv capacity_factor 
+
+. quietly: estimateregs
+
+. esttab, drop(_D*)       ///
+>         s(regtype covars state r2a N fstat, ///
+>                 label("Regression Type" "Controls" "State FE" "R-sq." "N" "F
+> irst-stage F-stat.")) ///
+>         se noconstant nonumbers label star(* 0.10 ** 0.05 *** 0.01)
+
+------------------------------------------------------------------------------
+> --------------------------------------
+                     Capacity F~r    Capacity F~r    Capacity F~r    Capacity 
+> F~r    Capacity F~r    Capacity F~r   
+------------------------------------------------------------------------------
+> --------------------------------------
+1603 Grant                 -5.148***       -3.626***       -2.842***       -3.
+> 697***       -2.893**        -3.156***
+                          (0.915)         (0.899)         (0.829)         (1.3
+> 51)         (1.238)         (1.170)   
+
+Regulated                                  -1.562          -5.439***          
+>              -1.371          -5.446***
+                                          (1.712)         (1.979)             
+>             (1.685)         (1.970)   
+
+PPA                                        -0.648          -2.608***          
+>              -0.600          -2.618***
+                                          (1.048)         (0.927)             
+>             (1.056)         (0.925)   
+
+IPP                                        -1.350          -2.554*            
+>              -1.408          -2.514*  
+                                          (1.333)         (1.351)             
+>             (1.305)         (1.307)   
+
+Potential Capacity~r                        0.501***        0.551***          
+>               0.503***        0.553***
+                                         (0.0366)        (0.0391)             
+>            (0.0368)        (0.0386)   
+
+Var(Wind Speed)                            0.0400          -0.426***          
+>              0.0637          -0.432***
+                                          (0.148)         (0.103)             
+>             (0.155)         (0.107)   
+
+log(Capacity)                              -0.567           0.571             
+>              -0.605           0.580   
+                                          (0.429)         (0.471)             
+>             (0.430)         (0.470)   
+
+Constant                    33.58***        17.47***        8.223***          
+>                                       
+                          (0.769)         (1.963)         (2.078)             
+>                                       
+------------------------------------------------------------------------------
+> --------------------------------------
+Regression Type               OLS             OLS             OLS            2
+> SLS            2SLS            2SLS   
+Controls                        N               Y               Y             
+>   N               Y               Y   
+State FE                        N               N               Y             
+>   N               N               Y   
+R-sq.                       0.372           0.557           0.660             
+>   -               -               -   
+N                            8752            8752            8752            8
+> 752            8752            8752   
+First-stage F-stat.                                                           
+> 148             169             113   
+------------------------------------------------------------------------------
+> --------------------------------------
+Standard errors in parentheses
+* p<0.10, ** p<0.05, *** p<0.01
+
+. 
+. *EXPORT FOR PAPER
+. esttab using "$outdir/tables/rdd_regressions_cf.tex" , ///
+>         se noconstant label star(* 0.10 ** 0.05 *** 0.01) replace  ///
+>         drop(_D* _*) nonotes compress order(flag_1603) ///
+>         s(regtype covars state r2a N fstat, ///
+>                 label("Regression Type" "Controls" "State FE" "R-sq." "N" "F
+> irst-stage F-stat.")) ///
+>         nomtitles booktabs 
+(output written to C:\GitDir\Projects\ags_capital_vs_output/output/tables/rdd_
+> regressions_cf.tex)
+
+.         
+. *EXPORT SUBSET FOR PRESENTATION
+. esttab tk* using "$outdir/tables/rdd_regressions_cf_prez.tex" , ///
+>         se noconstant nomtitles label star(* 0.10 ** 0.05 *** 0.01) replace 
+>  ///
+>         keep(flag* _cons) nonotes compress booktabs order(flag_1603) b(a2) /
+> //
+>         s(regtype covars state r2a N fstat, ///
+>                 label("Regression Type" "Controls" "State FE" "R-sq." "N" "F
+> irst-stage F-stat.")) 
+(output written to C:\GitDir\Projects\ags_capital_vs_output/output/tables/rdd_
+> regressions_cf_prez.tex)
+
+. 
+. *SAVE PREFERRED SPEC FOR POLICY EVAL FILE
+. estimates clear
+
+. ivreg2 $dv (flag_1603 = policy) $avs $covars , cluster(facilityid) partial($
+> avs ) first
+
+First-stage regressions
+-----------------------
+
+
+First-stage regression of flag_1603:
+
+Statistics robust to heteroskedasticity and clustering on facilityid
+Number of obs =                   8752
+Number of clusters (facilityid) =    146
+------------------------------------------------------------------------------
+             |               Robust
+   flag_1603 |      Coef.   Std. Err.      t    P>|t|     [95% Conf. Interval]
+-------------+----------------------------------------------------------------
+      policy |   .6555146   .0504291    13.00   0.000     .5566617    .7543675
+   reg_dummy |  -.3639076   .1493954    -2.44   0.015     -.656758   -.0710573
+   ppa_dummy |  -.0412283   .0748457    -0.55   0.582    -.1879437     .105487
+   ipp_dummy |  -.1096768   .1133714    -0.97   0.333    -.3319115     .112558
+ ptnl_cf_adj |    -.00075   .0024578    -0.31   0.760    -.0055679    .0040678
+     windvar |    -.03199   .0085016    -3.76   0.000    -.0486551    -.015325
+log_namepl~e |   .0336715   .0349762     0.96   0.336    -.0348901    .1022332
+------------------------------------------------------------------------------
+F test of excluded instruments:
+  F(  1,   145) =   168.97
+  Prob > F      =   0.0000
+Sanderson-Windmeijer multivariate F test of excluded instruments:
+  F(  1,   145) =   168.97
+  Prob > F      =   0.0000
+
+
+
+Summary results for first-stage regressions
+-------------------------------------------
+
+                                           (Underid)            (Weak id)
+Variable     | F(  1,   145)  P-val | SW Chi-sq(  1) P-val | SW F(  1,   145)
+flag_1603    |     168.97    0.0000 |      171.43   0.0000 |      168.97
+
+NB: first-stage test statistics cluster-robust
+
+Stock-Yogo weak ID F test critical values for single endogenous regressor:
+                                   10% maximal IV size             16.38
+                                   15% maximal IV size              8.96
+                                   20% maximal IV size              6.66
+                                   25% maximal IV size              5.53
+Source: Stock-Yogo (2005).  Reproduced by permission.
+NB: Critical values are for i.i.d. errors only.
+
+Underidentification test
+Ho: matrix of reduced form coefficients has rank=K1-1 (underidentified)
+Ha: matrix has rank=K1 (identified)
+Kleibergen-Paap rk LM statistic          Chi-sq(1)=67.05    P-val=0.0000
+
+Weak identification test
+Ho: equation is weakly identified
+Cragg-Donald Wald F statistic                                    8355.17
+Kleibergen-Paap Wald rk F statistic                               168.97
+
+Stock-Yogo weak ID test critical values for K1=1 and L1=1:
+                                   10% maximal IV size             16.38
+                                   15% maximal IV size              8.96
+                                   20% maximal IV size              6.66
+                                   25% maximal IV size              5.53
+Source: Stock-Yogo (2005).  Reproduced by permission.
+NB: Critical values are for Cragg-Donald F statistic and i.i.d. errors.
+
+Weak-instrument-robust inference
+Tests of joint significance of endogenous regressors B1 in main equation
+Ho: B1=0 and orthogonality conditions are valid
+Anderson-Rubin Wald test           F(1,145)=       5.09     P-val=0.0256
+Anderson-Rubin Wald test           Chi-sq(1)=      5.16     P-val=0.0231
+Stock-Wright LM S statistic        Chi-sq(1)=      5.21     P-val=0.0225
+
+NB: Underidentification, weak identification and weak-identification-robust
+    test statistics cluster-robust
+
+Number of clusters             N_clust  =        146
+Number of observations               N  =       8752
+Number of regressors                 K  =          7
+Number of endogenous regressors      K1 =          1
+Number of instruments                L  =          7
+Number of excluded instruments       L1 =          1
+Number of partialled-out regressors/IVs =         60
+NB: K & L do not included partialled-out variables
+
+IV (2SLS) estimation
+--------------------
+
+Estimates efficient for homoskedasticity only
+Statistics robust to heteroskedasticity and clustering on facilityid
+
+Number of clusters (facilityid) =    146              Number of obs =     8752
+                                                      F(  7,   145) =    61.54
+                                                      Prob > F      =   0.0000
+Total (centered) SS     =  756685.1144                Centered R2   =   0.3433
+Total (uncentered) SS   =  756685.1144                Uncentered R2 =   0.3433
+Residual SS             =  496879.0599                Root MSE      =    7.535
+
+------------------------------------------------------------------------------
+             |               Robust
+capacity_f~r |      Coef.   Std. Err.      z    P>|z|     [95% Conf. Interval]
+-------------+----------------------------------------------------------------
+   flag_1603 |  -2.892716   1.237576    -2.34   0.019    -5.318321    -.467111
+   reg_dummy |  -1.371033   1.685271    -0.81   0.416    -4.674103    1.932038
+   ppa_dummy |  -.6000093   1.056019    -0.57   0.570    -2.669768     1.46975
+   ipp_dummy |  -1.407641   1.304798    -1.08   0.281    -3.964999    1.149717
+ ptnl_cf_adj |   .5029271   .0368145    13.66   0.000     .4307721    .5750822
+     windvar |   .0636542   .1548708     0.41   0.681     -.239887    .3671954
+log_namepl~e |  -.6050331   .4296885    -1.41   0.159    -1.447207    .2371409
+------------------------------------------------------------------------------
+Underidentification test (Kleibergen-Paap rk LM statistic):             67.054
+                                                   Chi-sq(1) P-val =    0.0000
+------------------------------------------------------------------------------
+Weak identification test (Cragg-Donald Wald F statistic):             8355.168
+                         (Kleibergen-Paap rk Wald F statistic):        168.967
+Stock-Yogo weak ID test critical values: 10% maximal IV size             16.38
+                                         15% maximal IV size              8.96
+                                         20% maximal IV size              6.66
+                                         25% maximal IV size              5.53
+Source: Stock-Yogo (2005).  Reproduced by permission.
+NB: Critical values are for Cragg-Donald F statistic and i.i.d. errors.
+------------------------------------------------------------------------------
+Hansen J statistic (overidentification test of all instruments):         0.000
+                                                 (equation exactly identified)
+------------------------------------------------------------------------------
+Instrumented:         flag_1603
+Included instruments: reg_dummy ppa_dummy ipp_dummy ptnl_cf_adj windvar
+                      log_nameplate
+Excluded instruments: policy
+Partialled-out:       _Ddate_600 _Ddate_601 _Ddate_602 _Ddate_603 _Ddate_604
+                      _Ddate_605 _Ddate_606 _Ddate_607 _Ddate_608 _Ddate_609
+                      _Ddate_610 _Ddate_611 _Ddate_612 _Ddate_613 _Ddate_614
+                      _Ddate_615 _Ddate_616 _Ddate_617 _Ddate_618 _Ddate_619
+                      _Ddate_620 _Ddate_621 _Ddate_622 _Ddate_623 _Ddate_624
+                      _Ddate_625 _Ddate_626 _Ddate_627 _Ddate_628 _Ddate_629
+                      _Ddate_630 _Ddate_631 _Ddate_632 _Ddate_633 _Ddate_634
+                      _Ddate_635 _Ddate_636 _Ddate_637 _Ddate_638 _Ddate_639
+                      _Ddate_640 _Ddate_641 _Ddate_642 _Ddate_643 _Ddate_644
+                      _Ddate_645 _Ddate_646 _Ddate_647 _Ddate_648 _Ddate_649
+                      _Ddate_650 _Ddate_651 _Ddate_652 _Ddate_653 _Ddate_654
+                      _Ddate_655 _Ddate_656 _Ddate_657 _Ddate_658 _cons
+                      nb: total SS, model F and R2s are after partialling-out;
+                          any small-sample adjustments include partialled-out
+                          variables in regressor count K
+------------------------------------------------------------------------------
+
+. estimates save "$outdir/estimates/rd_main_spec", replace
+(note: file C:\GitDir\Projects\ags_capital_vs_output/output/estimates/rd_main_
+> spec.ster not found)
+file C:\GitDir\Projects\ags_capital_vs_output/output/estimates/rd_main_spec.st
+> er saved
+
+. 
+. 
+. ****************************************************************************
+> ****
+. *DO SAME THING WITH LOG(NETGEN)
+. ****************************************************************************
+> ****
+. use regdat, clear
+
+. clonevar tlog_nameplate = log_nameplate // gets dropped in esttab with progr
+> am above
+
+. global dv log_netgen tlog_nameplate
+
+. qui: estimateregs
+
+. 
+. esttab, drop(_D* log_nameplate)   order(flag_1603)      ///
+>         s(regtype covars state N fstat, ///
+>                 label("Regression Type" "Controls" "State FE" "N" "First-sta
+> ge F-stat.")) ///
+>         se noconstant nonumbers label star(* 0.10 ** 0.05 *** 0.01)
+
+------------------------------------------------------------------------------
+> --------------------------------------
+                     log(Genera~)    log(Genera~)    log(Genera~)    log(Gener
+> a~)    log(Genera~)    log(Genera~)   
+------------------------------------------------------------------------------
+> --------------------------------------
+1603 Grant                 -0.174***       -0.121***      -0.0939***       -0.
+> 129***       -0.108**        -0.107***
+                         (0.0332)        (0.0318)        (0.0283)        (0.04
+> 86)        (0.0426)        (0.0387)   
+
+log(Capacity)               0.991***        0.987***        1.020***        0.
+> 988***        0.986***        1.020***
+                         (0.0112)        (0.0148)        (0.0159)        (0.01
+> 19)        (0.0148)        (0.0158)   
+
+Regulated                                 -0.0890          -0.199***          
+>             -0.0856          -0.199***
+                                         (0.0586)        (0.0611)             
+>            (0.0578)        (0.0609)   
+
+PPA                                       -0.0427         -0.0995***          
+>             -0.0419         -0.0999***
+                                         (0.0369)        (0.0286)             
+>            (0.0368)        (0.0284)   
+
+IPP                                       -0.0797*        -0.0991**           
+>             -0.0807*        -0.0974** 
+                                         (0.0462)        (0.0433)             
+>            (0.0455)        (0.0425)   
+
+Potential Capacity~r                       0.0172***       0.0189***          
+>              0.0172***       0.0190***
+                                        (0.00117)       (0.00131)             
+>           (0.00117)       (0.00128)   
+
+Var(Wind Speed)                           0.00470         -0.0121***          
+>             0.00512         -0.0123***
+                                        (0.00475)       (0.00312)             
+>           (0.00498)       (0.00321)   
+
+Constant                    5.526***        4.920***        4.609***          
+>                                       
+                         (0.0532)        (0.0696)        (0.0701)             
+>                                       
+------------------------------------------------------------------------------
+> --------------------------------------
+Regression Type               OLS             OLS             OLS            2
+> SLS            2SLS            2SLS   
+Controls                        N               Y               Y             
+>   N               Y               Y   
+State FE                        N               N               Y             
+>   N               N               Y   
+N                            8752            8752            8752            8
+> 752            8752            8752   
+First-stage F-stat.                                                           
+> 143             169             113   
+------------------------------------------------------------------------------
+> --------------------------------------
+Standard errors in parentheses
+* p<0.10, ** p<0.05, *** p<0.01
+
+. 
+. *EXPORT FOR PAPER
+. esttab using "$outdir/tables/rdd_regressions_gen.tex" , ///
+>         se noconstant label star(* 0.10 ** 0.05 *** 0.01) replace  ///
+>         drop(_D* _*)  nonotes compress   order(flag_1603) ///
+>         s(regtype covars state N fstat, ///
+>                 label("Regression Type" "Controls" "State FE" "N" "First-sta
+> ge F-stat.")) ///
+>         nomtitles booktabs 
+(output written to C:\GitDir\Projects\ags_capital_vs_output/output/tables/rdd_
+> regressions_gen.tex)
+
+. 
+. *EXPORT SUBSET FOR PRESENTATION
+. esttab tk* using "$outdir/tables/rdd_regressions_gen_prez.tex" , ///
+>         se noconstant nomtitles label star(* 0.10 ** 0.05 *** 0.01) replace 
+>  ///
+>         keep(flag* _cons)  nonotes compress booktabs  order(flag_1603) b(a2)
+>  ///
+>         s(regtype covars state N fstat, ///
+>                 label("Regression Type" "Controls" "State FE" "N" "First-sta
+> ge F-stat.")) 
+(output written to C:\GitDir\Projects\ags_capital_vs_output/output/tables/rdd_
+> regressions_gen_prez.tex)
+
+. 
+. ****************************************************************************
+> ****
+. /* ROBUSTNESS: INCLUDE PIECEWISE LINEAR TREND */
+. ****************************************************************************
+> ****
+. use regdat, clear
+
+. 
+. * add distance from policy elegibility change for IV/RD
+. gen dist = ope_date_ym - ym(2009,1)
+
+. 
+. lab var dist "Distance"
+
+. gen firstmonth = month(ope_date_ym)
+
+. * use potential capacity factor
+. global dv capacity_factor
+
+. *global dv log_netgen log_nameplate 
+. gen dist_post = cond(policy == 1, dist,0)
+
+. lab var dist_post "Distance x Post"
+
+. global ltvars dist dist_post 
+
+. qui{
+
+. 
+. esttab , ///
+>         se noconstant label star(* 0.10 ** 0.05 *** 0.01) replace  ///
+>         drop(*dist*) nonotes compress order(flag_1603) ///
+>         s(regtype covars state trend N fstat, ///
+>                 label("Regression Type" "Controls" "State FE" "Trend" "N" "F
+> irst-stage F-stat.")) ///
+>         nomtitles 
+
+------------------------------------------------------------------------------
+> ----------------
+                       (1)          (2)          (3)          (4)          (5)
+>           (6)   
+------------------------------------------------------------------------------
+> ----------------
+1603 Grant          -3.697***    -2.893**     -3.156***    -6.376**     -4.774
+> **     -1.346   
+                   (1.351)      (1.238)      (1.170)      (2.520)      (2.241)
+>       (2.244)   
+
+Regulated                        -1.371       -5.446***                 -2.305
+>        -5.980***
+                                (1.685)      (1.970)                   (1.881)
+>       (1.943)   
+
+PPA                              -0.600       -2.618***                 -0.465
+>        -2.704***
+                                (1.056)      (0.925)                   (1.063)
+>       (0.952)   
+
+IPP                              -1.408       -2.514*                   -1.883
+>        -3.105** 
+                                (1.305)      (1.307)                   (1.337)
+>       (1.364)   
+
+Potential Capa~r                  0.503***     0.553***                  0.503
+> ***     0.560***
+                               (0.0368)     (0.0386)                  (0.0383)
+>      (0.0362)   
+
+Var(Wind Speed)                  0.0637       -0.432***                0.00692
+>        -0.433***
+                                (0.155)      (0.107)                   (0.160)
+>       (0.108)   
+
+log(Capacity)                    -0.605        0.580                    -0.643
+>         0.600   
+                                (0.430)      (0.470)                   (0.423)
+>       (0.478)   
+------------------------------------------------------------------------------
+> ----------------
+Regression Type       2SLS         2SLS         2SLS         2SLS         2SLS
+>          2SLS   
+Controls                 N            Y            Y            N            Y
+>             Y   
+State FE                 N            N            Y            N            N
+>             Y   
+Trend                    N            N            N            Y            Y
+>             Y   
+N                     8752         8752         8752         8752         8752
+>          8752   
+First-sta..            148          169          113           38           32
+>            22   
+------------------------------------------------------------------------------
+> ----------------
+
+.         
+. *EXPORT FOR PAPER
+. esttab using "$outdir/tables/rdd_regressions_cf_linear.tex" , ///
+>         se noconstant label star(* 0.10 ** 0.05 *** 0.01) replace  ///
+>         drop(*dist*) nonotes compress order(flag_1603) ///
+>         s(regtype covars state trend N fstat, ///
+>                 label("Regression Type" "Controls" "State FE" "Piecewise Tre
+> nd" "N" "First-stage F-stat.")) ///
+>                 nomtitles booktabs 
+(output written to C:\GitDir\Projects\ags_capital_vs_output/output/tables/rdd_
+> regressions_cf_linear.tex)
+
+. 
+. *EXPORT SUBSET FOR PRESENTATION
+. esttab tk* using "$outdir/tables/rdd_regressions_cf_linear_prez.tex" , ///
+>         se noconstant nomtitles label star(* 0.10 ** 0.05 *** 0.01) replace 
+>  ///
+>         keep(flag* *dist*) nonotes compress booktabs order(flag_1603) b(a2) 
+> ///
+>         s(regtype covars state trend N fstat, ///
+>                 label("Regression Type" "Controls" "State FE" "Trend" "N" "F
+> irst-stage F-stat.")) 
+(output written to C:\GitDir\Projects\ags_capital_vs_output/output/tables/rdd_
+> regressions_cf_linear_prez.tex)
+
+.                 
+. ****************************************************************************
+> ****
+. /* ROBUSTNESS: GENERATE PLOTS AND REGRESSION TABLES FOR ALTERNATIVE BANDWIDT
+> HS */
+. ****************************************************************************
+> ****
+. * this code requires the user-written package coefplot
+. // ssc install coefplot
+. ****************************************************************************
+> ****
+. set scheme s1color
+
+. use regdat_bw, clear
+
+. capture drop firstdate
+
+. clonevar firstdate = ope_date_ym
+
+. 
+. global bw_covars reg_dummy ppa_dummy ipp_dummy windvar log_nameplate
+
+. 
+. foreach var in log_netgen capacity_factor {
+  2.         foreach spec in nostateFEs stateFEs {
+  3.                 est clear
+  4.                 eststo clear
+  5.                 if `var'==log_netgen {
+  6.                         global dv log_netgen log_nameplate log_ptnl_outpu
+> t_adj
+  7.                         }
+  8.                 else if `var'==capacity_factor {
+  9.                         global dv capacity_factor ptnl_cf_adj
+ 10.                         }
+ 11.                 foreach i in 3 6 9 12 15 18 21 24 {
+ 12.                         if "`spec'"=="nostateFEs" {
+ 13.                                 eststo: quietly ivreg2 $dv (flag_1603 = p
+> olicy) $avs $bw_covars        if firstdate>=ym(2009,1)-`i' & firstdate<=ym(2
+> 009,1)+`i'-1, cluster(facilityid) partial($avs )
+ 14.                         }
+ 15.                         else if "`spec'"=="stateFEs" {
+ 16.                                 eststo: quietly ivreg2 $dv (flag_1603 = p
+> olicy) $avs $bw_covars _Dst*  if firstdate>=ym(2009,1)-`i' & firstdate<=ym(2
+> 009,1)+`i'-1, cluster(facilityid) partial($avs _Dst* )
+ 17.                         }
+ 18.                         estimates store m`i'
+ 19.                 }
+ 20.                 if `var'==log_netgen {
+ 21.                         coefplot ///
+>                                 m3, bylabel(3) || m6, bylabel(6) || m9, byla
+> bel(9) || m12, bylabel(12) || ///
+>                                 m15, bylabel(15) || m18, bylabel(18) || m21,
+>  bylabel(21) || m24, bylabel(24) ///
+>                                 bycoefs keep(flag_1603) vertical yline(0) //
+> /
+>                                 coeflabels(flag_1603 = " ") ///
+>                                 xtitle("Bandwidth (Months)") ///
+>                                 ytitle("1603 Grant Coefficient Estimate")
+ 22.                         graph export "$outdir/figures/fuzzyRDD_loggen_ban
+> dwidths_`spec'.png", replace
+ 23.                         
+.                         esttab using "$outdir/tables/fuzzyRDD_loggen_bandwid
+> ths_`spec'.tex", ///
+>                                 se noconstant nonumbers label star(* 0.10 **
+>  0.05 *** 0.01) replace  ///
+>                                 keep(flag_1603) mtitles("3 mo." "6 mo." "9 m
+> o." "12 mo." "15 mo." "18 mo." "21 mo." "24 mo.") ///
+>                                 s(N widstat, label("N" "First-stage F-stat."
+> )) ///
+>                                 title("Robustness: Sensitivity of Grant Impa
+> ct to Bandwidth\label{RDD:loggenbandwidth}") ///
+>                                 substitute("Standard errors in parentheses" 
+> "Standard errors clustered by facility in parentheses.")
+ 24.                 }
+ 25.                 else if `var'==capacity_factor {
+ 26.                         coefplot ///
+>                                 m3, bylabel(3) || m6, bylabel(6) || m9, byla
+> bel(9) || m12, bylabel(12) || ///
+>                                 m15, bylabel(15) || m18, bylabel(18) || m21,
+>  bylabel(21) || m24, bylabel(24) ///
+>                                 bycoefs keep(flag_1603) vertical yline(0) //
+> /
+>                                 coeflabels(flag_1603 = " ") ///
+>                                 xtitle("Bandwidth (Months)") ///
+>                                 ytitle("1603 Grant Coefficient Estimate")
+ 27.                         graph export "$outdir/figures/fuzzyRDD_capfactor_
+> bandwidths_`spec'.png", replace
+ 28.                         
+.                         esttab using "$outdir/tables/fuzzyRDD_capfactor_band
+> widths_`spec'.tex", ///
+>                                 se noconstant nonumbers label star(* 0.10 **
+>  0.05 *** 0.01) replace  ///
+>                                 keep(flag_1603) mtitles("3 mo." "6 mo." "9 m
+> o." "12 mo." "15 mo." "18 mo." "21 mo." "24 mo.") ///
+>                                 s(N widstat, label("N" "First-stage F-stat."
+> )) ///
+>                                 title("Robustness: Sensitivity of Grant Impa
+> ct to Bandwidth\label{RDD:logCFbandwidth}") ///
+>                                 substitute("Standard errors in parentheses" 
+> "Standard errors clustered by facility in parentheses.")
+ 29.                 }
+ 30.         }
+ 31. }
+(est1 stored)
+(est2 stored)
+(est3 stored)
+(est4 stored)
+(est5 stored)
+(est6 stored)
+(est7 stored)
+(est8 stored)
+(file C:\GitDir\Projects\ags_capital_vs_output/output/figures/fuzzyRDD_loggen_
+> bandwidths_nostateFEs.png written in PNG format)
+(tabulating estimates stored by eststo; specify "." to tabulate the active res
+> ults)
+(output written to C:\GitDir\Projects\ags_capital_vs_output/output/tables/fuzz
+> yRDD_loggen_bandwidths_nostateFEs.tex)
+(est1 stored)
+(est2 stored)
+(est3 stored)
+(est4 stored)
+(est5 stored)
+(est6 stored)
+(est7 stored)
+(est8 stored)
+(file C:\GitDir\Projects\ags_capital_vs_output/output/figures/fuzzyRDD_loggen_
+> bandwidths_stateFEs.png written in PNG format)
+(tabulating estimates stored by eststo; specify "." to tabulate the active res
+> ults)
+(output written to C:\GitDir\Projects\ags_capital_vs_output/output/tables/fuzz
+> yRDD_loggen_bandwidths_stateFEs.tex)
+(est1 stored)
+(est2 stored)
+(est3 stored)
+(est4 stored)
+(est5 stored)
+(est6 stored)
+(est7 stored)
+(est8 stored)
+(file C:\GitDir\Projects\ags_capital_vs_output/output/figures/fuzzyRDD_capfact
+> or_bandwidths_nostateFEs.png written in PNG format)
+(tabulating estimates stored by eststo; specify "." to tabulate the active res
+> ults)
+(output written to C:\GitDir\Projects\ags_capital_vs_output/output/tables/fuzz
+> yRDD_capfactor_bandwidths_nostateFEs.tex)
+(est1 stored)
+(est2 stored)
+(est3 stored)
+(est4 stored)
+(est5 stored)
+(est6 stored)
+(est7 stored)
+(est8 stored)
+(file C:\GitDir\Projects\ags_capital_vs_output/output/figures/fuzzyRDD_capfact
+> or_bandwidths_stateFEs.png written in PNG format)
+(tabulating estimates stored by eststo; specify "." to tabulate the active res
+> ults)
+(output written to C:\GitDir\Projects\ags_capital_vs_output/output/tables/fuzz
+> yRDD_capfactor_bandwidths_stateFEs.tex)
+
+. ****************************************************************************
+> ****
+. cap graph close
+
+. tempsetup
+C:\GitDir\Projects\ags_capital_vs_output\temp
+
+. cd "$repodir" 
+C:\GitDir\Projects\ags_capital_vs_output
+
+. capture log close

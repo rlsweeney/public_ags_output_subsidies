@@ -1,0 +1,18 @@
+{
+\def\sym#1{\ifmmode^{#1}\else\(^{#1}\)\fi}
+\begin{tabular}{l*{4}{c}}
+\toprule
+                    &\multicolumn{1}{c}{(1)}         &\multicolumn{1}{c}{(2)}         &\multicolumn{1}{c}{(3)}         &\multicolumn{1}{c}{(4)}         \\
+\midrule
+1603 Grant          &      -2.989\sym{***}&      -3.362\sym{***}&      -3.472\sym{***}&      -3.716\sym{***}\\
+                    &     (0.918)         &     (0.961)         &     (1.032)         &     (1.033)         \\
+\midrule
+\# Pre-PTC          &         108         &         100         &          90         &          86         \\
+\# Post-PTC         &          54         &          51         &          44         &          35         \\
+\# Post-1603        &         116         &          87         &          78         &          83         \\
+Region              & Nerc-1(ISO)         &         ISO         &    Nerc*ISO         &       State         \\
+R-sq.               &       0.634         &       0.677         &       0.661         &       0.642         \\
+N                   &       13439         &       11724         &       10577         &       10106         \\
+\bottomrule
+\end{tabular}
+}

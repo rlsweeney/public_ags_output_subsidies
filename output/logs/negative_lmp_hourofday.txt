@@ -1,0 +1,284 @@
+------------------------------------------------------------------------------------------
+      name:  <unnamed>
+       log:  D:\GitDir\Projects\ags_capital_vs_output/output/logs/negative_lmp_hourofday.t
+> xt
+  log type:  text
+ opened on:  13 Jul 2022, 08:27:30
+
+. ********************************************************************************
+. 
+. global lmp_data "$dropbox/Data/public/ISO_LMP"
+
+. global output "$repodir/generated_data"
+
+. 
+. ********************************************************************************
+. *               CALC FRACTION OF YEAR-MONTH-HOUR OF DAY WITH NEGATIVE PRICES 
+. ********************************************************************************
+. /* This program calculate the fraction of negative prices for each year-month-hour of da
+> y
+>    combo.
+>    
+>    The final output will give 
+>    year   month   hour      fract_below_0
+>    2009    12      2            .5
+>    
+>    This says that 2AM in December 2009, 50% of prices were below 0
+> 
+> */
+. capture program drop hour_fractions
+
+. program define hour_fractions
+  1.         qui {
+  2.                 gen month = month(date)
+  3.                 gen year = year(date)
+  4.                 *Make sure there is only a single year
+.                 qui tab year
+  5.                 assert `r(r)' == 1
+  6.                 
+.                 * Calculate Fraction of prices below 0 for year-month-hour of day
+.                 bys year month hour: gen total_obs = _N
+  7.                 bys year month hour: egen count_below_0 = total(lmp < 0)
+  8.                 gen fract_below_0 = count_below_0 / total_obs
+  9.                 
+.                 keep month year hour fract_below_0
+ 10.                 bys month year hour: keep if _n == 1
+ 11.         }       
+ 12. end
+
+. 
+. global firstyear 2010
+
+. global lastyear 2014
+
+. 
+. ***********************
+. * PJM - Hours 1-24
+. **********************
+. forval year = $firstyear / $lastyear {
+  2.         qui {
+  3.                 use "$lmp_data/PJM/pjm_`year'.dta", clear
+  4.                 hour_fractions
+  5.                 tempfile pjm_`year'
+  6.                 save "`pjm_`year''"
+  7.         }
+  8. }
+
+. clear
+
+. forval year = $firstyear / $lastyear {
+  2.         append using "`pjm_`year''"
+  3. }
+
+. gen iso = "PJM"
+
+. compress
+  variable month was float now byte
+  variable year was float now int
+  (7,800 bytes saved)
+
+. tempfile pjm
+
+. save "`pjm'"
+file C:\Users\Rich\AppData\Local\Temp\ST_4840_000006.tmp saved
+
+. *************************
+. * ERCOT - Hours 0 - 23
+. ************************
+. forval year = $firstyear / $lastyear { 
+  2.         use "$lmp_data/ERCOT/ercot_`year'.dta", clear
+  3.         hour_fractions
+  4.         * Change from 0-23 to 1-24
+.         replace hour = hour + 1
+  5.         tempfile ercot_`year'
+  6.         save "`ercot_`year''"   
+  7. }
+(24 real changes made)
+file C:\Users\Rich\AppData\Local\Temp\ST_4840_000007.tmp saved
+(288 real changes made)
+file C:\Users\Rich\AppData\Local\Temp\ST_4840_000008.tmp saved
+(288 real changes made)
+file C:\Users\Rich\AppData\Local\Temp\ST_4840_000009.tmp saved
+(288 real changes made)
+file C:\Users\Rich\AppData\Local\Temp\ST_4840_00000a.tmp saved
+(288 real changes made)
+file C:\Users\Rich\AppData\Local\Temp\ST_4840_00000b.tmp saved
+
+. clear
+
+. forval year = $firstyear / $lastyear {
+  2.         append using "`ercot_`year''"
+  3. }
+
+. gen iso = "ERCOT"
+
+. compress
+  variable month was float now byte
+  variable year was float now int
+  (5,885 bytes saved)
+
+. tempfile ercot
+
+. save "`ercot'"
+file C:\Users\Rich\AppData\Local\Temp\ST_4840_00000c.tmp saved
+
+. ***********************
+. * MISO - Hours 0 - 23
+. ***********************
+. forval year = $firstyear / $lastyear {
+  2.         use "$lmp_data/MISO/miso_`year'.dta", clear
+  3.         hour_fractions
+  4.         * Change from 0 - 23 to 1 -24
+.         replace hour = hour + 1
+  5.         tempfile miso_`year'
+  6.         save "`miso_`year''"
+  7. }
+(288 real changes made)
+file C:\Users\Rich\AppData\Local\Temp\ST_4840_00000d.tmp saved
+(288 real changes made)
+file C:\Users\Rich\AppData\Local\Temp\ST_4840_00000e.tmp saved
+(288 real changes made)
+file C:\Users\Rich\AppData\Local\Temp\ST_4840_00000f.tmp saved
+(288 real changes made)
+file C:\Users\Rich\AppData\Local\Temp\ST_4840_00000g.tmp saved
+(288 real changes made)
+file C:\Users\Rich\AppData\Local\Temp\ST_4840_00000h.tmp saved
+
+. clear
+
+. forval year = $firstyear / $lastyear {
+  2.         append using "`miso_`year''"
+  3. }
+
+. gen iso = "MISO"
+
+. order year month hour
+
+. compress
+  variable year was float now int
+  variable month was float now byte
+  (7,200 bytes saved)
+
+. tempfile miso
+
+. save "`miso'"
+file C:\Users\Rich\AppData\Local\Temp\ST_4840_00000i.tmp saved
+
+. ******************************
+. * NEISO - hours 1 - 25
+. ******************************
+. forval year = $firstyear / $lastyear {
+  2.         qui {
+  3.                 use "$lmp_data/NEISO/neiso_lmp_`year'.dta", clear
+  4.                 hour_fractions
+  5.                 tempfile neiso_`year'
+  6.                 save "`neiso_`year''"
+  7.         }
+  8. }
+
+. clear
+
+. forval year = $firstyear / $lastyear {
+  2.         append using "`neiso_`year''"
+  3. }
+
+. gen iso = "NEISO"
+
+. compress
+  variable month was float now byte
+  variable year was float now int
+  (7,225 bytes saved)
+
+. tempfile neiso
+
+. save "`neiso'"
+file C:\Users\Rich\AppData\Local\Temp\ST_4840_00000o.tmp saved
+
+. ************************
+. * NYISO - Hours 0 - 23
+. ************************
+. forval year = $firstyear / $lastyear {
+  2.         qui {
+  3.                 use "$lmp_data/NYISO/nyiso_`year'.dta", clear
+  4.                 hour_fractions
+  5.                 
+.                 * Change from 0 - 23 to 1 - 24
+.                 replace hour = hour + 1
+  6.                 tempfile nyiso_`year'
+  7.                 save "`nyiso_`year''"
+  8.         }
+  9. }
+
+. clear
+
+. forval year = $firstyear / $lastyear {
+  2.         append using "`nyiso_`year''"
+  3. }
+
+. gen iso = "NYISO"
+
+. compress
+  variable month was float now byte
+  variable year was float now int
+  (7,200 bytes saved)
+
+. tempfile nyiso
+
+. save "`nyiso'"
+file C:\Users\Rich\AppData\Local\Temp\ST_4840_00000u.tmp saved
+
+. *******************************
+. * CAISO - Hours 1 - 25
+. *******************************
+. forval year = $firstyear / $lastyear {
+  2.         qui {
+  3.                 use "$lmp_data/CAISO/caiso`year'.dta", clear
+  4.                 hour_fractions
+  5.                 tempfile caiso_`year'
+  6.                 save "`caiso_`year''"
+  7.         }
+  8. }
+
+. clear
+
+. forval year = $firstyear / $lastyear {
+  2.         append using "`caiso_`year''"
+  3. }
+
+. gen iso = "CAISO"
+
+. compress
+  variable month was float now byte
+  variable year was float now int
+  (6,975 bytes saved)
+
+. tempfile caiso
+
+. save "`caiso'"          
+file C:\Users\Rich\AppData\Local\Temp\ST_4840_000012.tmp saved
+
+. ***************************
+. * BRING THEM ALL TOGETHER
+. ***************************
+. clear
+
+. foreach iso in ercot miso neiso nyiso pjm caiso {
+  2.         append using "``iso''"
+  3. }
+
+. compress
+  (0 bytes saved)
+
+. save "$output/lmp_hour_of_day_fractions.dta", replace
+(note: file D:\GitDir\Projects\ags_capital_vs_output/generated_data/lmp_hour_of_day_fracti
+> ons.dta not found)
+file D:\GitDir\Projects\ags_capital_vs_output/generated_data/lmp_hour_of_day_fractions.dta
+>  saved
+
+. 
+. 
+. ********************************************************************************
+. tempsetup
+D:\GitDir\Projects\ags_capital_vs_output\temp
+
+. capture log close

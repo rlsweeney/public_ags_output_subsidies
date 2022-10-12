@@ -1,0 +1,634 @@
+----------------------------------------------------------------------------------------
+      name:  <unnamed>
+       log:  C:\GitDir\Projects\ags_capital_vs_output/output/logs/prep_policyeval.txt
+  log type:  text
+ opened on:  14 Jul 2022, 09:37:02
+
+. ********************************************************************************
+. 
+. *SET GLOBAL ASSUMPTION PARAMETERS **********************************************
+. ** [ not actually using these in this code, but going to call this file 
+. ** at the top of derivative code ]
+. 
+. eststo clear
+
+. estimates use  "$outdir/estimates/rd_main_spec.ster" //IV estimate
+
+. local te_iv = _b[flag_1603]
+
+. estimates use  "$outdir/estimates/match_main_spec.ster" //IV estimate
+
+. local te_match = _b[flag_1603]
+
+. global teffect = -1*(`te_iv' + `te_match')/200
+
+. 
+. /*******************************************************************************
+> DATA PREP 
+> *******************************************************************************/
+. 
+. *READ IN DEFLATOR *************************************************************
+. use $repodir/generated_data/deflators, clear
+
+. rename year firstyear
+
+. save fdeflator, replace 
+(note: file fdeflator.dta not found)
+file fdeflator.dta saved
+
+. 
+. *GET PPAs *************************************************************
+. ** [ these don't vary month to month, so need to clean then merge with panel ]
+. 
+. use $repodir/generated_data/static_reg_data, clear
+
+. *PARSE PPA PRICES
+. split pparate, parse(",") gen(tp_)
+variables created as string: 
+tp_1  tp_2  tp_3  tp_4  tp_5  tp_6
+
+. destring tp_*, force replace
+tp_1: all characters numeric; replaced as double
+(691 missing values generated)
+tp_2: all characters numeric; replaced as double
+(890 missing values generated)
+tp_3: all characters numeric; replaced as double
+(930 missing values generated)
+tp_4: all characters numeric; replaced as double
+(946 missing values generated)
+tp_5: all characters numeric; replaced as double
+(950 missing values generated)
+tp_6: all characters numeric; replaced as double
+(955 missing values generated)
+
+. egen pparate_max = rowmax(tp_*)
+(691 missing values generated)
+
+. egen pparate_med = rowmedian(tp_*)
+(691 missing values generated)
+
+. drop tp_*
+
+. 
+. merge 1:1 facilityid using $repodir/generated_data/external_data_all, nogen keep(match
+>  master)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                           317
+        from master                       317  
+        from using                          0  
+
+    matched                               642  
+    -----------------------------------------
+
+. 
+. capture drop p_ppa
+
+. egen p_ppa = rowmax(pparate_med PPA_bnef_median) 
+(634 missing values generated)
+
+. 
+. *put in real dollars based on first year 
+. merge m:1 firstyear using fdeflator, nogen keep(match master) 
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                               959  
+    -----------------------------------------
+
+. 
+. replace p_ppa = p_ppa*gdp_deflator2014 if gdp_deflator != .
+(309 real changes made)
+
+. 
+. keep facilityid p_ppa
+
+. 
+. save ppa_data, replace
+(note: file ppa_data.dta not found)
+file ppa_data.dta saved
+
+. 
+. 
+. * MERGE THESE INTO MONTHLY PANEL; CLEAN PRICES ***********************************
+. 
+. use $repodir/generated_data/panel_reg_data, clear
+
+. 
+. merge m:1 facilityid using ppa_data, nogen keep(match master)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                            66,589  
+    -----------------------------------------
+
+. 
+. * CLEAN MONTHLY PRICES **************************************
+. 
+. ** RETAIL PRICES ARE CENTS PER KWH
+. replace state_avg_price = state_avg_price*10
+(66,589 real changes made)
+
+. 
+. ** REC PRICES 
+. ** [ cleaned in `build/rec_prep.do` ]
+. gen p_rec = cond(rec_price != .,rec_price,0)
+
+. gen p_rec_exp = cond(expected_rec != .,expected_rec,0)
+
+. 
+. ** IOWA ALSO HAS A $15/mwh state level tax credit
+. ** https://iub.iowa.gov/renewable-energy-tax-credits **
+. replace p_rec = p_rec + 15 if state =="IA" & age <=120
+(4,320 real changes made)
+
+. replace p_rec_exp = p_rec_exp + 15 if state =="IA" & age <=120
+(4,320 real changes made)
+
+. 
+. ** PUT PRICES IN REAL TERMS 
+. ** [ASSUMING REC PRICE NOMINAL ]
+. merge m:1 year using $repodir/generated_data/deflators, nogen keep(match master)
+(note: variable year was int, now float to accommodate using data's values)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                            66,589  
+    -----------------------------------------
+
+. 
+. foreach v of varlist price_resale_EIA state_avg_price p_rec* {
+  2.         replace `v' = `v'*gdp_deflator
+  3. }
+(21,241 real changes made)
+(56,499 real changes made)
+(17,217 real changes made)
+(26,613 real changes made)
+
+. 
+. ** FILL IN MISSING PRICES WITH FACILITY AVERAGE
+. capture drop tk
+
+. egen tk = mean(price_resale_EIA), by(facilityid)
+(10,188 missing values generated)
+
+. replace price_resale_EIA = tk if price_resale_EIA == .
+(26,941 real changes made)
+
+. 
+. ** SOME FIRMS HAVE NON-RESALE SALES. 
+. ** GIVING THEM THE AVERAGE RETAIL PRICE IN STATE
+. 
+. gen frac_resale = salesforresale /  totaldisposition
+(12,716 missing values generated)
+
+. replace frac_resale = 0 if totaldisp > 0 & totaldisp != . & frac_res == .
+(183 real changes made)
+
+. replace frac_resale = 1 if frac_resale > 1 & frac_resale != .
+(36 real changes made)
+
+. capture drop tk 
+
+. egen tk = mean(frac_resale), by(facilityid)
+(8,471 missing values generated)
+
+. replace frac_resale = tk if frac_resale == .
+(4,062 real changes made)
+
+. drop tk 
+
+. 
+. gen avg_price = frac_resale * price_resale + (1-frac_resale) * state_avg_price
+(10,188 missing values generated)
+
+. replace avg_price = state_avg_price if frac_resale==0
+(976 real changes made)
+
+. 
+. * FOR CALCULATING PROFITS, SET PRICE EQUAL TO THE MAX OF EIA RESALE OR PPA 
+. egen p_max = rowmax(avg_price p_ppa)
+(8,946 missing values generated)
+
+. gen p = p_max + p_rec_exp 
+(8,946 missing values generated)
+
+. 
+. ** calculate share non-missing prices 
+. gen pmiss = cond(avg_price == . | avg_price == 0,1,0)
+
+. egen npmiss = sum(pmiss), by(facilityid)
+
+. bys facilityid: gen ni = _N
+
+. gen pct_p_missing = npmiss/ni 
+
+. drop pmiss npmiss 
+
+. 
+. ** PUT CAPACITY FACTOR IN PCT 
+. replace capacity_factor = capacity_factor/100
+(65,947 real changes made)
+
+. 
+. order facilityid year month age flag_1603 avg_price p_* /// 
+>                 capacity_factor monthcap nameplate_capacity 
+
+. 
+. sort facilityid year month
+
+. 
+. ** RESTRICT SAMPLE
+. ** [ insample;  plantS observed through 2014]
+. 
+. keep if insample
+(29,480 observations deleted)
+
+. egen maxyear = max(year), by(facilityid)
+
+. keep if maxyear == 2014
+(0 observations deleted)
+
+. 
+. drop if pct_p_missing > .5 
+(3,198 observations deleted)
+
+. drop if facilityid == 57566 // this one missing price data for a year 
+(34 observations deleted)
+
+. 
+. ** RESTRICT TO PLANTS ENTERING DURING THE 1603 PERIOD 
+. ** [not using the others for anything at the momemnt]
+. keep if firstyear >= 2009 & firstyear <= 2012
+(20,429 observations deleted)
+
+. 
+. save revdata, replace
+(note: file revdata.dta not found)
+file revdata.dta saved
+
+. 
+. 
+. * COLLAPSE AVERAGE PRICE AND CAPACITY FACTOR  ****************************************
+> ****************************
+. 
+. use revdata, clear
+
+. 
+. gen tc = capacity_factor*p
+
+. collapse (sum) tc tk = capacity_factor (mean) capacity_factor, by(facilityid) 
+
+. 
+. gen avg_p = tc/tk
+
+. drop tk tc 
+
+. 
+. *MERGE IN PLANT CHARACTERISTICS
+. merge 1:1 facilityid using $repodir/generated_data/static_reg_data, nogen keep(match m
+> aster)
+(label pcurve_match already defined)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                               308  
+    -----------------------------------------
+
+. merge 1:1 facilityid using $repodir/generated_data/cost_estimates, nogen keep(match ma
+> ster)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                               308  
+    -----------------------------------------
+
+. merge 1:1 facilityid using ppa_data, nogen keep(match master)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                               308  
+    -----------------------------------------
+
+. 
+. *use estimated costs where not observed
+. gen flag_cost_estimated = cond(cost_mw == . | costsample == 0,1,0)
+
+. replace cost_mw = cost_mw_est if flag_cost_estimated == 1
+(85 real changes made)
+
+. 
+. save policyEvalData, replace
+(note: file policyEvalData.dta not found)
+file policyEvalData.dta saved
+
+. 
+. /*******************************************************************************
+> PROGRAM PREP 
+> *******************************************************************************/
+. 
+. * GET PROFITS ******************************************************************
+. ** this program estimates everything per mw, which can be immediately be related to th
+> e te 
+. 
+. capture program drop getprofits
+
+. program define getprofits
+  1.         args teffect nyears rfirm rptc output_subsidy capital_subsidy noTE include_
+> depreciation
+  2. 
+. * TEFFECT ; NUMBER OF YEARS ; ANNUAL DISCOUNT RATE ; 
+. ** PTC DISCOUNT RATE; OUTPUT SUBSIDY LEVEL ; INVESTMENT SUBSIDY LEVEL ;
+. * INDICATOR=1 TO SHUT DOWN PTC_RESPONSE ; INDICATOR=1 TO INCLUDE DEPRECIATION
+.         
+. qui{
+  3. 
+.         use policyEvalData, clear
+  4.         
+.         local lifemonths = `nyears'*12
+  5.         local mrate = (1+`rfirm')^(1/12)-1 // monthly equivalent of annual rate whe
+> n compounded
+  6.         local mrate_ptc = (1+`rptc')^(1/12)-1 // monthly equivalent of annual rate 
+> when compounded
+  7.         local ptcresponse = `teffect'*`output_subsidy'/23  // linearly scales treat
+> ment effect 
+  8.         if(`noTE'==1){
+  9.                         local ptcresponse = 0
+ 10.         }
+ 11.         
+.         *get annuity factors 
+.         gen df_an_T = (1 - (1 + `mrate')^(-`lifemonths'))/`mrate' 
+ 12.         gen df_an_10 = (1 - (1 + `mrate')^(-120))/`mrate'
+ 13.         gen df_an_10_ptc = (1 - (1 + `mrate_ptc')^(-120))/`mrate_ptc'
+ 14. 
+.         * 1603 REVENUES *************************************************************
+.         *adjust observed cf by scaled TE 
+.         ** all these plants are pre 10 years 
+.         ** so PTC plants need to be adjusted down by te to for 1603 
+.         
+.         gen cf_1603 = capacity_factor 
+ 15.         replace cf_1603 = cf_1603 - `teffect' if flag_1603 == 0
+ 16. 
+.         * use capacity factor and annuity to get discounted quantity per mw over 25 ye
+> ars
+.         * [730 is average number of hours in a month 8760/12]
+.         gen dQ_1603 = cf_1603 * 730 * df_an_T // d signifies "discounted" ; "delta" is
+>  change 
+ 17.         gen lcoe_1603 = cost_mw*1000000/dQ_1603
+ 18.         
+.         gen dRev_1603_mw = dQ_1603 * avg_p/1000000 
+ 19.         
+.         * PTC REVENUES *************************************************************
+.         ** for ptc, teffect yields ptcresponse more output for 10 years 
+.         gen delta_dQ_ptc = `ptcresponse' * 730 * df_an_10
+ 20.         gen dQ_ptc = dQ_1603 + delta_dQ_ptc
+ 21. 
+.         gen lcoe_ptc = cost_mw*1000000/dQ_ptc
+ 22.         
+.         * get additional revenues under ptc (on marginal and inframarginal output)
+.         gen p_ptc = `output_subsidy' // scale ptc revenue down in nominal terms 
+ 23.         
+.         * on marginal output, assume net revenue is half the marginal price times the 
+> marginal quantity 
+.         * discount these streams at the PTC discount rate, to get implied ammount of u
+> pfront "revenue" (investment) 
+.         gen netrev_ptc_marginal = .5 * p_ptc * `ptcresponse' * 730 * df_an_10_ptc
+ 24.         gen rev_ptc_infra = p_ptc*cf_1603*730 * df_an_10_ptc
+ 25. 
+.         gen dRev_PTC_mw = dRev_1603_mw + (rev_ptc_infra + netrev_ptc_marginal)/1000000
+ 26. 
+.         *these are just for summarizing the effective average price under the ptc
+.         gen d_rev_ptc_infra = rev_ptc_infra/dQ_ptc
+ 27.         gen d_rev_ptc_marginal = netrev_ptc_marginal/dQ_ptc
+ 28.         gen avg_p_ptc = avg_p + d_rev_ptc_infra + d_rev_ptc_marginal
+ 29. 
+.         save policyRevenues, replace
+ 30.         
+.         *O&M COSTS
+.         use $repodir/generated_data/deflators, clear
+ 31.         keep if year==2018
+ 32.         local om_deflator = gdp_deflator2014
+ 33.         
+.         use policyRevenues, clear
+ 34.         capture drop fixedOMkWyear 
+ 35.         gen fixedOMkWyear = 29 * `om_deflator' // FROM 2018 DOE WTMR, DEFLATED TO 2
+> 014 DOLLARS
+ 36.         
+.         gen fom_mw = fixedOMkWyear/12*1000 * df_an_T / 1000000
+ 37.         
+.         *PROFITS
+.         gen pi_1603 = dRev_1603_mw - cost_mw*(1-`capital_subsidy') - fom_mw
+ 38.         gen pi_ptc = dRev_PTC_mw - cost_mw - fom_mw
+ 39.         
+.         *PUBLIC EXPENDITURE IN MILLION $ PER MW
+.         gen pubexp_1603 = cost_mw * `capital_subsidy'
+ 40.         gen pubexp_ptc  = `output_subsidy' * (cf_1603 + `ptcresponse') * 730 * df_a
+> n_10 / 1e6 // convert dollars to millions of dollars
+ 41.         
+.         *INCLUDE DEPRECIATION
+.         if(`include_depreciation'==1){
+ 42.                 local tax_rate = 0.35 // set marginal tax rate
+ 43. 
+.                 *GROSS DEPRECIATION
+.                 *50% bonus in year 1, then 5-year MACRS halved bc of bonus: 10%, 16%, 
+> 9.6%, 5.76%, 5.76%, 2.88%
+.                 *this is based on table A-1 of IRS Publication 946 (2012)
+.                 
+.                 gen deprec_factor = (0.5+0.1)*(1/(1+`rptc')) + 0.16*(1/(1+`rptc'))^2 +
+>  /// this is a multiplier to get PDV of depreciation per dollar of cost basis
+>                         0.096*(1/(1+`rptc'))^3 + 0.0576*(1/(1+`rptc'))^4 + 0.0576*(1/(
+> 1+`rptc'))^5 + 0.0288*(1/(1+`rptc'))^6
+ 44. 
+.                 gen gross_deprec_PTC =  `tax_rate' * deprec_factor * cost_mw // add PD
+> V of depreciation from profits, assuming marginal tax rate of 35%
+ 45.                 gen gross_deprec_1603 = `tax_rate' * deprec_factor * (1 - `capital_
+> subsidy' / 2) * cost_mw  // add PDV of depreciation value after reducing cost basis by
+>  half of 1603 grant amount
+ 46.                 
+.                 *DISCOUNT THE GOVERNMENT COST AT REGULAR DISCOUNT RATE 
+.                 gen deprec_factor_gov = (0.5+0.1)*(1/(1+`rfirm')) + 0.16*(1/(1+`rfirm'
+> ))^2 + /// this is a multiplier to get PDV of depreciation per dollar of cost basis
+>                         0.096*(1/(1+`rfirm'))^3 + 0.0576*(1/(1+`rfirm'))^4 + 0.0576*(1
+> /(1+`rfirm'))^5 + 0.0288*(1/(1+`rfirm'))^6
+ 47.         
+.                 gen gross_deprec_PTC_gov =  `tax_rate' * deprec_factor_gov * cost_mw /
+> / add PDV of depreciation from profits, assuming marginal tax rate of 35%
+ 48.                 gen gross_deprec_1603_gov = `tax_rate' * deprec_factor_gov * (1 - `
+> capital_subsidy' / 2) * cost_mw  // add PDV of depreciation value after reducing cost 
+> basis by half of 1603 grant amount
+ 49.                 
+.                 
+.                 replace pi_ptc = pi_ptc + gross_deprec_PTC 
+ 50.                 replace pi_1603 = pi_1603 + gross_deprec_1603
+ 51.                 *public expenditure per mw
+.                 replace pubexp_ptc  = pubexp_ptc  + gross_deprec_PTC_gov
+ 52.                 replace pubexp_1603 = pubexp_1603 + gross_deprec_1603_gov
+ 53.         }
+ 54.         
+.         *CONVERT dQ PER MW to dQ IN LEVELS
+.         replace dQ_ptc = dQ_ptc * first_nameplate_capacity
+ 55.         replace dQ_1603 = dQ_1603 * first_nameplate_capacity
+ 56.         
+.         *CONVERT PUBLIC EXPENDITURE FROM MILLION $ PER MW TO $ IN LEVELS
+.         replace pubexp_ptc = pubexp_ptc * first_nameplate_capacity * 1e6
+ 57.         replace pubexp_1603 = pubexp_1603 * first_nameplate_capacity * 1e6
+ 58.         
+.         *SUBSIDY GROUP FOR 1603 PLANTS
+.         capture drop sgroup
+ 59.         gen sgroup = "both" if pi_1603>=0 // & flag_1603==1
+ 60.         replace sgroup = "1603 only" if pi_1603>=0 & pi_ptc<0 
+ 61.         replace sgroup = "PTC only" if pi_1603<0 & pi_ptc>=0 
+ 62.         replace sgroup = "neither" if pi_1603<0 & pi_ptc<0
+ 63. 
+.         gen ind_pi_ptc = pi_ptc > 0
+ 64.         gen ind_pi_1603 = pi_1603 > 0
+ 65. 
+.         gen ptc_pref = cond(pi_ptc > pi_1603,1,0)
+ 66. 
+. }
+ 67. end
+
+. 
+. capture program drop tab_profits
+
+. program define tab_profits
+  1. 
+.         sum pi_*, detail
+  2.         
+.         di "Indicator for pi > 0 by type"
+  3.         tab ind_*
+  4.         
+.         di "1603 plants only" 
+  5.         tab ind_* if flag_1603 == 1
+  6.         
+.         di "PTC preference by subsidy type selected"
+  7.         tab ptc_pref flag_1603
+  8. end
+
+. 
+. 
+end of do-file
+
+. 
+. save policydata, replace
+(note: file policydata.dta not found)
+file policydata.dta saved
+
+. 
+. use policydata, clear 
+
+. 
+. * convert these to lcoe terms: 25 years, discount factor of 0.05
+. local nyears = 25
+
+. local r = 0.05
+
+. local lifemonths = `nyears'*12
+
+. local mrate = (1+`r')^(1/12)-1 // monthly equivalent of annual rate when compounded
+
+. gen df_an_T = (1 - (1 + `mrate')^(-`lifemonths'))/`mrate' 
+
+. 
+. * use capacity factor and annuity to get discounted quantity per mw over 25 years
+. * [730 is average number of hours in a month 8760/12]
+. gen dQ_mw = capacity_factor * 730 * df_an_T // d signifies "discounted" ; "delta" is c
+> hange 
+
+. 
+. 
+. * define measure of investment intensity
+. gen qF = dQ_mw/(cost_mw*1e6) // return cost_mw to dollar terms, not millions
+
+. *gen lcoe = 1/qF
+. *summ lcoe
+. 
+. * correlate with average price 
+. twoway (scatter avg_p qF if flag_1603 == 1) (lfit avg_p qF if flag_1603 == 1), ///
+>         xtitle("Investment Productivity (PDV MWh / Investment Cost $)") /// 
+>         ytitle("Average Price ($/MWh)") ///     note("Vertical line denotes availabili
+> ty of 1603 cash grant for wind farms entering after January 1, 2009.")
+>         scheme(s1color) legend(off)
+
+.         
+. graph export "$outdir/figures/price_vs_capprod_1603.png", replace
+(file C:\GitDir\Projects\ags_capital_vs_output/output/figures/price_vs_capprod_1603.png 
+> written in PNG format)
+
+. 
+. corr qF avg_p if flag_1603 == 1
+(obs=211)
+
+             |       qF    avg_p
+-------------+------------------
+          qF |   1.0000
+       avg_p |  -0.4106   1.0000
+
+
+. local pm_corr_1603 = round(`r(rho)',.01)
+
+. di `pm_corr_1603'
+-.41
+
+. 
+. file open myfile using "$repodir/output/estimates/pm_corr_1603.tex", write text replac
+> e 
+
+. file write myfile "`pm_corr_1603'"
+
+. file close myfile
+
+. 
+. *same thing for all post 2008 plants 
+. 
+. * correlate with average price 
+. twoway (scatter avg_p qF) (lfit avg_p qF), ///
+>         xtitle("Investment Productivity (PDV MWh / Investment Cost $)") /// 
+>         ytitle("Average Price ($/MWh)") ///     note("Vertical line denotes availabili
+> ty of 1603 cash grant for wind farms entering after January 1, 2009.")
+>         scheme(s1color) legend(off)
+
+.         
+. graph export "$outdir/figures/price_vs_capprod_all.png", replace
+(file C:\GitDir\Projects\ags_capital_vs_output/output/figures/price_vs_capprod_all.png w
+> ritten in PNG format)
+
+. 
+. corr qF avg_p 
+(obs=308)
+
+             |       qF    avg_p
+-------------+------------------
+          qF |   1.0000
+       avg_p |  -0.5122   1.0000
+
+
+. 
+. local pm_corr_all = round(`r(rho)',.01)
+
+. di `pm_corr_all'
+-.51
+
+. 
+. file open myfile using "$repodir/output/estimates/pm_corr_all.tex", write text replace
+>  
+
+. file write myfile "`pm_corr_all'"
+
+. file close myfile
+
+. 
+. ********************************************************************************
+. cap graph close
+
+. tempsetup
+C:\GitDir\Projects\ags_capital_vs_output\temp
+
+. capture log close

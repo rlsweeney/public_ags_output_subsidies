@@ -1,0 +1,676 @@
+----------------------------------------------------------------------------------------
+      name:  <unnamed>
+       log:  C:\GitDir\Projects\ags_capital_vs_output/output/logs/rdd_regressions_negati
+> ve_lmp.txt
+  log type:  text
+ opened on:  14 Jul 2022, 10:07:09
+
+. ********************************************************************************
+. 
+. ********************************************************************************
+. * PREP DATA 
+. ********************************************************************************
+. use $repodir/generated_data/panel_reg_data, clear
+
+. keep if insample_covars
+(32,194 observations deleted)
+
+. * restrict to balanced panel
+. keep if year>=2010
+(8,840 observations deleted)
+
+. 
+. * from get_negative_price_production.do
+. merge 1:1 facilityid year month using "$repodir/generated_data/negative_correction.dta
+> ", nogen keep(match)
+(note: variable facilityid was long, now double to accommodate using data's values)
+(note: variable year was int, now float to accommodate using data's values)
+(note: variable month was byte, now float to accommodate using data's values)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                            22,735  
+    -----------------------------------------
+
+. 
+. drop if iso_dummy == 0
+(4,397 observations deleted)
+
+. 
+. tab iso_rto_code node_ISO_new
+
+iso_rto_cod |                      node_ISO_new
+          e |     CAISO      ERCOT       MISO      NEISO      NYISO |     Total
+------------+-------------------------------------------------------+----------
+      CAISO |     1,730          0          0          0          0 |     1,730 
+      ERCOT |         0      2,620          0          0          0 |     2,620 
+      ISONE |         0          0          0        463          0 |       463 
+       MISO |         0          0      6,498          0          0 |     6,644 
+      NYISO |         0          0          0          0        867 |       867 
+      OTHER |        38          0         44          0          0 |        82 
+        PJM |         0          0        150          0          0 |     2,208 
+        SPP |         0      1,855      1,869          0          0 |     3,724 
+------------+-------------------------------------------------------+----------
+      Total |     1,768      4,475      8,561        463        867 |    18,338 
+
+
+            | node_ISO_n
+iso_rto_cod |     ew
+          e |       PJM |     Total
+------------+-----------+----------
+      CAISO |         0 |     1,730 
+      ERCOT |         0 |     2,620 
+      ISONE |         0 |       463 
+       MISO |       146 |     6,644 
+      NYISO |         0 |       867 
+      OTHER |         0 |        82 
+        PJM |     2,058 |     2,208 
+        SPP |         0 |     3,724 
+------------+-----------+----------
+      Total |     2,204 |    18,338 
+
+. drop if iso_rto_code == "SPP"
+(3,724 observations deleted)
+
+. drop if year == 2010
+(2,034 observations deleted)
+
+. 
+. clonevar date = ymdate
+
+. xi i.state i.windclass_eia i.date i.nercnum i.off_cat_num ///
+>         i.ott i.iso_rto_code i.entnum, prefix(_D) noomit
+
+. drop  _Ddate_659 // drop same period in each reg
+
+. drop if age == 0 // output could be for partial month at time 0
+(112 observations deleted)
+
+. replace log_netgen = log(netgen + 1)
+(12,468 real changes made)
+
+. gen log_ptnl_output_adj = log(ptnl_output_adj)
+
+. lab var log_ptnl_output_adj "log(Potential Output)"
+
+. lab var ptnl_cf_adj "Potential Capacity Factor"
+
+. lab var design_windspeed_eia "Design Wind Speed"
+
+. 
+. * define new potential cf variables, used to predict response 
+. drop ptnl_*
+
+. gen ptnl_cf = output_new/(monthours*turbine_capacity_pc)*100 
+
+. gen ptnl_cf_l0 = l_output_0/(monthours*turbine_capacity_pc)*100 
+
+. gen ptnl_cf_g0 = ptnl_cf - ptnl_cf_l0
+
+. gen ptnl_cf_adj = output_adj_new/(monthours*turbine_capacity_pc)*100 
+
+. gen ptnl_cf_adj_l0 = l_output_adj_0/(monthours*turbine_capacity_pc)*100 
+
+. gen ptnl_cf_adj_g0 = ptnl_cf_adj - ptnl_cf_adj_l0
+
+.         
+. gen ptnl_output = monthcap*ptnl_cf/100
+
+. gen ptnl_output_adj = monthcap*ptnl_cf_adj/100
+
+. 
+. save regdat, replace
+(note: file regdat.dta not found)
+file regdat.dta saved
+
+. 
+. 
+. * EXPORT COUNTS OF MATCHED PLANTS FOR WRITEUP 
+. 
+. use regdat, clear
+
+. bys facilityid: gen tn = _n
+
+. keep if tn == 1
+(12,171 observations deleted)
+
+. 
+. tab flag_1603, matcell(tm)
+
+ 1603 Grant |      Freq.     Percent        Cum.
+------------+-----------------------------------
+          0 |        177       59.60       59.60
+          1 |        120       40.40      100.00
+------------+-----------------------------------
+      Total |        297      100.00
+
+. mat list tm
+
+tm[2,1]
+     c1
+r1  177
+r2  120
+
+. local N_LMP_PTC = tm[1,1]
+
+. local N_LMP_1603 = tm[2,1]
+
+. 
+. file open myfile using "$repodir/output/estimates/N_LMP_PTC.tex", write text replace 
+
+. file write myfile "`N_LMP_PTC'"
+
+. file close myfile
+
+. 
+. file open myfile using "$repodir/output/estimates/N_LMP_1603.tex", write text replace 
+
+. file write myfile "`N_LMP_1603'"
+
+. file close myfile
+
+. 
+. keep if firstyear == 2008 | firstyear == 2009
+(197 observations deleted)
+
+. 
+. tab flag_1603, matcell(tm)
+
+ 1603 Grant |      Freq.     Percent        Cum.
+------------+-----------------------------------
+          0 |         63       63.00       63.00
+          1 |         37       37.00      100.00
+------------+-----------------------------------
+      Total |        100      100.00
+
+. mat list tm
+
+tm[2,1]
+    c1
+r1  63
+r2  37
+
+. local N_LMP_PTC = tm[1,1]
+
+. local N_LMP_1603 = tm[2,1]
+
+. 
+. file open myfile using "$repodir/output/estimates/N_LMP_PTC_rddsample.tex", write text
+>  replace 
+
+. file write myfile "`N_LMP_PTC'"
+
+. file close myfile
+
+. 
+. file open myfile using "$repodir/output/estimates/N_LMP_1603_rddsample.tex", write tex
+> t replace 
+
+. file write myfile "`N_LMP_1603'"
+
+. file close myfile
+
+. 
+. 
+. * EXPORT SUMMARY OF NEGATIVE PRICE SHARES (HOURS AND POTENTIAL CF)
+. use regdat, clear
+
+. 
+. gen plant_type = cond(flag_1603 ==1,"1603","PTC")
+
+. replace share_l0 = share_l0 * 100
+(9,827 real changes made)
+
+. label var share_l0 "Share of Hours"     
+
+. label var ptnl_cf_adj_l0 "Potential Capacity Factor"
+
+. replace output_share_l0 = output_share_l0 * 100
+(9,769 real changes made)
+
+. label var output_share_l0 "Potential Output Share"
+
+. 
+. summ share_l0 if plant_type=="PTC"
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+    share_l0 |      7,560    5.807344    7.467701          0   45.43011
+
+. local negative_hours_PTC: display %03.1f r(mean)
+
+. 
+. file open myfile using "$repodir/output/estimates/negative_hours_PTC.tex", write text 
+> replace 
+
+. file write myfile "`negative_hours_PTC'"
+
+. file close myfile
+
+. 
+. summ share_l0 if plant_type=="1603"
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+    share_l0 |      4,908    3.570481    5.829922          0   44.22043
+
+. local negative_hours_1603: display %03.1f r(mean)
+
+. 
+. file open myfile using "$repodir/output/estimates/negative_hours_1603.tex", write text
+>  replace 
+
+. file write myfile "`negative_hours_1603'"
+
+. file close myfile
+
+. 
+. summ ptnl_cf_adj_l0 if plant_type=="PTC"
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+ptnl_cf_a~l0 |      7,560    3.494387     5.03933          0   34.08761
+
+. local negative_pcf_PTC: display %03.1f r(mean)
+
+. 
+. file open myfile using "$repodir/output/estimates/negative_pcf_PTC.tex", write text re
+> place 
+
+. file write myfile "`negative_pcf_PTC'"
+
+. file close myfile
+
+. 
+. summ ptnl_cf_adj_l0 if plant_type=="1603"
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+ptnl_cf_a~l0 |      4,908    2.018408    4.024153          0   37.13404
+
+. local negative_pcf_1603: display %03.1f r(mean)
+
+. 
+. file open myfile using "$repodir/output/estimates/negative_pcf_1603.tex", write text r
+> eplace 
+
+. file write myfile "`negative_pcf_1603'"
+
+. file close myfile
+
+. 
+. * ESTIMATE REGRESSION OF OBSERVED ON POTENTIAL CF INTERACTED WITH NEGATIVE PRICE HOURS
+. eststo clear
+
+. 
+. gen ind_1603_ptnl = cond(flag_1603 == 1,ptnl_cf_adj,0)
+
+. gen ind_1603_ptnl_l0 = cond(flag_1603 == 1,ptnl_cf_adj_l0,0)
+
+. gen ind_PTC_ptnl = cond(flag_1603 == 0,ptnl_cf_adj,0)
+
+. gen ind_PTC_ptnl_l0 = cond(flag_1603 == 0,ptnl_cf_adj_l0,0)
+
+. 
+. la var capacity_factor "Observed Capacity Factor"
+
+. 
+. la var ind_1603_ptnl "1603 - Potential Capacity Factor"
+
+. la var ind_1603_ptnl_l0 "1603 - Negative Price Potential Capacity Factor"
+
+. 
+. la var ind_PTC_ptnl "PTC - Potential Capacity Factor"
+
+. la var ind_PTC_ptnl_l0 "PTC - Negative Price Potential Capacity Factor"
+
+. 
+. reghdfe capacity_factor ind_PTC_ptnl ind_PTC_ptnl_l0 ind_1603_ptnl ind_1603_ptnl_l0 , 
+> ///
+>         absorb(facilityid date) cluster(facilityid)
+(MWFE estimator converged in 5 iterations)
+
+HDFE Linear regression                            Number of obs   =     12,468
+Absorbing 2 HDFE groups                           F(   4,    296) =     146.86
+Statistics robust to heteroskedasticity           Prob > F        =     0.0000
+                                                  R-squared       =     0.7732
+                                                  Adj R-squared   =     0.7667
+                                                  Within R-sq.    =     0.4306
+Number of clusters (facilityid) =        297      Root MSE        =     5.8545
+
+                               (Std. Err. adjusted for 297 clusters in facilityid)
+----------------------------------------------------------------------------------
+                 |               Robust
+ capacity_factor |      Coef.   Std. Err.      t    P>|t|     [95% Conf. Interval]
+-----------------+----------------------------------------------------------------
+    ind_PTC_ptnl |   .7399143   .0334892    22.09   0.000     .6740072    .8058213
+ ind_PTC_ptnl_l0 |   .0415743   .0404605     1.03   0.305    -.0380524    .1212009
+   ind_1603_ptnl |   .6824194   .0327127    20.86   0.000     .6180405    .7467983
+ind_1603_ptnl_l0 |  -.3254076   .0908973    -3.58   0.000    -.5042944   -.1465207
+           _cons |   6.339987   1.100112     5.76   0.000     4.174955     8.50502
+----------------------------------------------------------------------------------
+
+Absorbed degrees of freedom:
+-----------------------------------------------------+
+ Absorbed FE | Categories  - Redundant  = Num. Coefs |
+-------------+---------------------------------------|
+  facilityid |       297         297           0    *|
+        date |        48           0          48     |
+-----------------------------------------------------+
+* = FE nested within cluster; treated as redundant for DoF computation
+
+. 
+. esttab, label se noconstant nonumbers star(* 0.10 ** 0.05 *** 0.01)
+
+------------------------------------
+                     Observed C~r   
+------------------------------------
+PTC - Potential Ca~r        0.740***
+                         (0.0335)   
+
+PTC - Negative Pri~C       0.0416   
+                         (0.0405)   
+
+1603 - Potential C~r        0.682***
+                         (0.0327)   
+
+1603 - Negative Pr~        -0.325***
+                         (0.0909)   
+------------------------------------
+Observations                12468   
+------------------------------------
+Standard errors in parentheses
+* p<0.10, ** p<0.05, *** p<0.01
+
+. 
+. esttab using "$outdir/tables/negative_cf_reg_bytype.tex" , ///
+>         se noconstant label star(* 0.10 ** 0.05 *** 0.01) replace  ///
+>         nonotes compress booktabs nonumber
+(output written to C:\GitDir\Projects\ags_capital_vs_output/output/tables/negative_cf_re
+> g_bytype.tex)
+
+.         
+. * RUN PREDICTION JUST ON 1603 PLANTS    
+. areg capacity_factor ptnl_cf_adj ptnl_cf_adj_l0 _Dd* if flag_1603 == 1, absorb(facilit
+> yid)
+
+Linear regression, absorbing indicators         Number of obs     =      4,908
+Absorbed variable: facilityid                   No. of categories =        120
+                                                F(  49,   4739)   =     176.05
+                                                Prob > F          =     0.0000
+                                                R-squared         =     0.7447
+                                                Adj R-squared     =     0.7356
+                                                Root MSE          =     6.0798
+
+--------------------------------------------------------------------------------
+capacity_fac~r |      Coef.   Std. Err.      t    P>|t|     [95% Conf. Interval]
+---------------+----------------------------------------------------------------
+   ptnl_cf_adj |   .7415136   .0116633    63.58   0.000     .7186481    .7643792
+ptnl_cf_adj_l0 |  -.3546838   .0315344   -11.25   0.000    -.4165059   -.2928617
+    _Ddate_612 |   .6991035   .9779434     0.71   0.475     -1.21812    2.616327
+    _Ddate_613 |   .7092713   .9616867     0.74   0.461    -1.176081    2.594624
+    _Ddate_614 |   1.274176   .9448486     1.35   0.178    -.5781665    3.126518
+    _Ddate_615 |   4.704125   .9568674     4.92   0.000      2.82822    6.580029
+    _Ddate_616 |   4.900715   .9377111     5.23   0.000     3.062365    6.739064
+    _Ddate_617 |   5.628826   .9251375     6.08   0.000     3.815127    7.442526
+    _Ddate_618 |    4.99854   .9334792     5.35   0.000     3.168487    6.828593
+    _Ddate_619 |    4.01945   .9244463     4.35   0.000     2.207106    5.831795
+    _Ddate_620 |   2.020538   .9135713     2.21   0.027     .2295134    3.811562
+    _Ddate_621 |   3.628406   .8997323     4.03   0.000     1.864513    5.392299
+    _Ddate_622 |   4.480625   .8933431     5.02   0.000     2.729257    6.231992
+    _Ddate_623 |   2.430243    .878678     2.77   0.006     .7076263    4.152861
+    _Ddate_624 |    1.60898   .8730128     1.84   0.065    -.1025304    3.320491
+    _Ddate_625 |    1.29356       .851     1.52   0.129    -.3747958    2.961915
+    _Ddate_626 |   2.072886   .8466579     2.45   0.014     .4130434    3.732729
+    _Ddate_627 |   3.450512   .8378277     4.12   0.000      1.80798    5.093043
+    _Ddate_628 |   5.880084   .8339416     7.05   0.000     4.245171    7.514998
+    _Ddate_629 |   7.215377   .8295817     8.70   0.000     5.589012    8.841743
+    _Ddate_630 |   5.288091   .8507114     6.22   0.000     3.620301     6.95588
+    _Ddate_631 |   4.961695   .8482084     5.85   0.000     3.298813    6.624578
+    _Ddate_632 |    3.05885   .8332542     3.67   0.000     1.425284    4.692415
+    _Ddate_633 |   3.649897   .8160316     4.47   0.000     2.050096    5.249698
+    _Ddate_634 |   1.786052   .8162549     2.19   0.029     .1858127    3.386291
+    _Ddate_635 |   .7430759   .8077231     0.92   0.358    -.8404368    2.326589
+    _Ddate_636 |  -2.793101   .7951464    -3.51   0.000    -4.351957   -1.234244
+    _Ddate_637 |  -1.389137   .7879722    -1.76   0.078    -2.933929    .1556543
+    _Ddate_638 |   1.190783    .786356     1.51   0.130      -.35084    2.732406
+    _Ddate_639 |   4.848526    .790376     6.13   0.000     3.299022     6.39803
+    _Ddate_640 |   6.633614   .7859037     8.44   0.000     5.092878    8.174351
+    _Ddate_641 |   6.963245   .7936251     8.77   0.000     5.407371    8.519119
+    _Ddate_642 |    4.88074   .8063034     6.05   0.000      3.30001    6.461469
+    _Ddate_643 |   4.196666   .8145198     5.15   0.000     2.599829    5.793504
+    _Ddate_644 |   3.753358   .7980822     4.70   0.000     2.188746     5.31797
+    _Ddate_645 |   2.446776   .7890585     3.10   0.002     .8998546    3.993697
+    _Ddate_646 |   1.833174   .7897976     2.32   0.020     .2848034    3.381544
+    _Ddate_647 |  -1.459143    .785076    -1.86   0.063    -2.998257    .0799706
+    _Ddate_648 |  -3.454973   .8027221    -4.30   0.000    -5.028681   -1.881264
+    _Ddate_649 |  -.3265763   .7883548    -0.41   0.679    -1.872118    1.218965
+    _Ddate_650 |   .6418447   .7918652     0.81   0.418    -.9105791    2.194269
+    _Ddate_651 |    3.55909   .7947844     4.48   0.000     2.000943    5.117236
+    _Ddate_652 |    5.61747   .7861992     7.15   0.000     4.076154    7.158786
+    _Ddate_653 |   6.703137   .7900656     8.48   0.000     5.154241    8.252033
+    _Ddate_654 |   4.534209   .7992953     5.67   0.000     2.967219    6.101199
+    _Ddate_655 |   4.182871   .8168904     5.12   0.000     2.581387    5.784356
+    _Ddate_656 |   3.687193   .8005143     4.61   0.000     2.117813    5.256573
+    _Ddate_657 |   3.402198   .7857481     4.33   0.000     1.861767     4.94263
+    _Ddate_658 |   3.366374   .7919064     4.25   0.000      1.81387    4.918879
+         _cons |   1.432762   .7022131     2.04   0.041     .0560977    2.809426
+--------------------------------------------------------------------------------
+F test of absorbed indicators: F(119, 4739) = 37.607          Prob > F = 0.000
+
+. 
+. capture drop pred_cf 
+
+. predict pred_cf_base
+(option xb assumed; fitted values)
+
+. replace ptnl_cf_adj_l0 = 0
+(9,769 real changes made)
+
+. predict pred_cf_extra
+(option xb assumed; fitted values)
+
+. gen extra_cf = pred_cf_extra - pred_cf_base
+
+. 
+. gen capacity_factor_extra = capacity_factor
+
+. replace capacity_factor_extra = capacity_factor + extra_cf if flag_1603
+(3,563 real changes made)
+
+. 
+. save regdat_predicted, replace
+(note: file regdat_predicted.dta not found)
+file regdat_predicted.dta saved
+
+.  
+. use regdat_predicted, clear
+
+. * specify regression structure once
+. * restrict sample to firms that began operating between 2008-2009
+. keep if firstyear==2008 | firstyear==2009
+(7,668 observations deleted)
+
+. 
+. gen cf_1603_adj = capacity_factor
+
+. replace  cf_1603_adj = (1 + output_share_l0_adj)*capacity_factor if flag_1603 == 1
+(1,246 real changes made)
+
+. 
+. global temp_avs _Dd* 
+
+. 
+. global covars reg_dummy ppa_dummy ipp_dummy ptnl_cf_adj windvar log_nameplate 
+
+. 
+. eststo clear
+
+. 
+. qui: eststo : ivreg2 capacity_factor (flag_1603 = policy) $covars $temp_avs , cluster(
+> facilityid) partial($temp_avs) first
+
+.                 mat def a = e(first)
+
+.                 estadd local fstat = round(a[4,1])
+
+added macro:
+              e(fstat) : "171"
+
+.                 estadd local model = "none", replace
+
+added macro:
+              e(model) : "none"
+
+.                 
+. qui: eststo : ivreg2 cf_1603_adj (flag_1603 = policy) $covars $temp_avs , cluster(faci
+> lityid) partial($temp_avs) first
+
+.                 mat def a = e(first)
+
+.                 estadd local fstat = round(a[4,1])
+
+added macro:
+              e(fstat) : "171"
+
+.                 estadd local model = "full potential", replace                        
+>   
+
+added macro:
+              e(model) : "full potential"
+
+. 
+. qui: eststo : ivreg2 capacity_factor_extra (flag_1603 = policy) $covars $temp_avs , cl
+> uster(facilityid) partial($temp_avs) first
+
+.                 mat def a = e(first)
+
+.                 estadd local fstat = round(a[4,1])
+
+added macro:
+              e(fstat) : "171"
+
+.                 estadd local model = "predicted", replace               
+
+added macro:
+              e(model) : "predicted"
+
+. 
+. global temp_avs _Dd* _Dst*
+
+. 
+. qui: eststo : ivreg2 capacity_factor (flag_1603 = policy) $covars $temp_avs , cluster(
+> facilityid) partial($temp_avs) first
+
+.                 mat def a = e(first)
+
+.                 estadd local fstat = round(a[4,1])
+
+added macro:
+              e(fstat) : "172"
+
+.                 estadd local model = "none", replace
+
+added macro:
+              e(model) : "none"
+
+.                 estadd local state "Y", replace
+
+added macro:
+              e(state) : "Y"
+
+.                 
+. qui: eststo : ivreg2 cf_1603_adj (flag_1603 = policy) $covars $temp_avs , cluster(faci
+> lityid) partial($temp_avs) first
+
+.                 mat def a = e(first)
+
+.                 estadd local fstat = round(a[4,1])
+
+added macro:
+              e(fstat) : "172"
+
+.                 estadd local model = "full potential", replace                        
+>   
+
+added macro:
+              e(model) : "full potential"
+
+.                 estadd local state "Y", replace
+
+added macro:
+              e(state) : "Y"
+
+. 
+. qui: eststo : ivreg2 capacity_factor_extra (flag_1603 = policy) $covars $temp_avs , cl
+> uster(facilityid) partial($temp_avs) first
+
+.                 mat def a = e(first)
+
+.                 estadd local fstat = round(a[4,1])
+
+added macro:
+              e(fstat) : "172"
+
+.                 estadd local model = "predicted", replace               
+
+added macro:
+              e(model) : "predicted"
+
+.                 estadd local state "Y", replace
+
+added macro:
+              e(state) : "Y"
+
+. 
+. esttab, keep(flag_1603) ///
+>         s(model state N fstat, ///
+>                 label("Output Adjustment" "State FE" "N" "First-stage F-stat.")) ///
+>         se noconstant nonumbers label star(* 0.10 ** 0.05 *** 0.01)
+
+----------------------------------------------------------------------------------------
+> ----------------------------
+                     Observed C~r     cf_1603_adj    capacity_f~a    Observed C~r     cf
+> _1603_adj    capacity_f~a   
+----------------------------------------------------------------------------------------
+> ----------------------------
+1603 Grant                 -4.186***       -2.034          -3.136**        -3.589***    
+>    -0.866          -2.235** 
+                          (1.477)         (1.575)         (1.498)         (1.066)       
+>   (1.077)         (0.998)   
+----------------------------------------------------------------------------------------
+> ----------------------------
+Output Adjustment            none    full potential       predicted            none    f
+> ull potential       predicted   
+State FE                                                                        Y       
+>         Y               Y   
+N                            4800            4800            4800            4800       
+>      4800            4800   
+First-stage F-stat.           171             171             171             172       
+>       172             172   
+----------------------------------------------------------------------------------------
+> ----------------------------
+Standard errors in parentheses
+* p<0.10, ** p<0.05, *** p<0.01
+
+. 
+. *EXPORT FOR PAPER
+. esttab using "$outdir/tables/rdd_regs_negative_output.tex" , ///
+>         se noconstant label star(* 0.10 ** 0.05 *** 0.01) replace  ///
+>         keep(flag_1603) nonotes compress order(flag_1603) ///
+>         s(model state N fstat, ///
+>                 label("Output Adjustment" "State FE" "N" "First-stage F-stat.")) ///
+>         nomtitles booktabs 
+(output written to C:\GitDir\Projects\ags_capital_vs_output/output/tables/rdd_regs_negat
+> ive_output.tex)
+
+.         
+.         
+. tempsetup
+C:\GitDir\Projects\ags_capital_vs_output\temp
+
+. cd "$repodir" 
+C:\GitDir\Projects\ags_capital_vs_output
+
+. capture log close

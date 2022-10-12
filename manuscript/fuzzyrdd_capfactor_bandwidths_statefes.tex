@@ -1,0 +1,17 @@
+\begin{table}[htbp]\centering
+\def\sym#1{\ifmmode^{#1}\else\(^{#1}\)\fi}
+\caption{Robustness: Sensitivity of Grant Impact to Bandwidth\label{RDD:logCFbandwidth}}
+\begin{tabular}{l*{8}{c}}
+\hline\hline
+                    &\multicolumn{1}{c}{3 mo.}&\multicolumn{1}{c}{6 mo.}&\multicolumn{1}{c}{9 mo.}&\multicolumn{1}{c}{12 mo.}&\multicolumn{1}{c}{15 mo.}&\multicolumn{1}{c}{18 mo.}&\multicolumn{1}{c}{21 mo.}&\multicolumn{1}{c}{24 mo.}\\
+\hline
+1603 Grant          &      -1.355         &      -1.837         &      -2.135\sym{*}  &      -3.156\sym{***}&      -2.913\sym{***}&      -3.013\sym{***}&      -3.174\sym{***}&      -2.966\sym{***}\\
+                    &     (2.046)         &     (1.825)         &     (1.095)         &     (1.170)         &     (0.946)         &     (0.992)         &     (0.947)         &     (0.862)         \\
+\hline
+N                   &        2760         &        4200         &        5999         &        8752         &       10596         &       11163         &       12064         &       13871         \\
+First-stage F-stat. &       13.60         &       26.45         &       84.96         &       112.9         &       166.8         &       171.4         &       196.1         &       255.2         \\
+\hline\hline
+\multicolumn{9}{l}{\footnotesize Standard errors clustered by facility in parentheses.}\\
+\multicolumn{9}{l}{\footnotesize \sym{*} \(p<0.10\), \sym{**} \(p<0.05\), \sym{***} \(p<0.01\)}\\
+\end{tabular}
+\end{table}

@@ -1,0 +1,1014 @@
+----------------------------------------------------------------------------------------
+      name:  <unnamed>
+       log:  C:\GitDir\Projects\ags_capital_vs_output/output/logs/match_nodes_to_plants.
+> txt
+  log type:  text
+ opened on:  14 Jul 2022, 09:39:09
+
+. ********************************************************************************
+. 
+. /*******************************************************************************
+> PART 1: 
+> *******************************************************************************/
+. *BRING IN NODE DATA AND DEFINE SAMPLE
+. *from build/negative_lmp_nodes.do
+. 
+. clear
+
+. foreach iso in ercot miso neiso nyiso pjm caiso {
+  2.         append using "$generated_data/`iso'_negative_lmp.dta"
+  3. }
+(note: variable node_name was str12, now str14 to accommodate using data's values)
+(note: variable type was str9, now str12 to accommodate using data's values)
+(note: variable node_name was str14, now str26 to accommodate using data's values)
+(note: variable node_name was str26, now str31 to accommodate using data's values)
+
+. compress
+  variable month was float now byte
+  variable year was float now int
+  (4,694,150 bytes saved)
+
+. save all_iso_negative_lmp, replace
+(note: file all_iso_negative_lmp.dta not found)
+file all_iso_negative_lmp.dta saved
+
+. 
+. use all_iso_negative_lmp, clear
+
+. tostring node_id, gen(my_node_id)
+my_node_id generated as str10
+
+. replace my_node_id = node_name if iso != "PJM"
+variable my_node_id was str10 now str31
+(438,534 real changes made)
+
+. replace my_node_id = subinstr(my_node_id," ","",.)
+(34,694 real changes made)
+
+. gen my_node_string = iso + "-" + my_node_id
+
+. sort my_node_string year month
+
+. by my_node_string: gen nodeObs = _N
+
+. by my_node_string: gen node_n = _n
+
+. 
+. keep if node_n == 1
+(914,413 observations deleted)
+
+. keep my_node* node_name node_id iso nodeObs
+
+. save nodecounts, replace
+(note: file nodecounts.dta not found)
+file nodecounts.dta saved
+
+. 
+. 
+. 
+. * GET NODE TYPE INFO AND LAT LONG DATA FROM SNL
+. *from build/match_nodes_to_lat_long.do
+. use "$generated_data/lmp_nodes_with_lat_long.dta", clear
+
+. drop if node_in_data == 2 // drop locations not found in LMP data
+(6,253 observations deleted)
+
+. 
+. tostring node_id, gen(my_node_id)
+my_node_id generated as str10
+
+. replace my_node_id = node_name if iso != "PJM"
+variable my_node_id was str10 now str31
+(12,198 real changes made)
+
+. replace my_node_id = subinstr(my_node_id," ","",.)
+(829 real changes made)
+
+. gen my_node_string = iso + "-" + my_node_id
+
+. 
+. * CREATE A FLAG FOR GENERATION NODES
+. gen flag_gen_node = 1
+
+. drop gen_node ag_gen_node 
+
+. replace flag_gen_node = 0 if iso == "MISO" & type != "Gennode"
+(1,129 real changes made)
+
+. replace flag_gen_node = 0 if iso == "PJM" & type != "GEN"
+(10,887 real changes made)
+
+. replace flag_gen_node = 0 if iso == "NEISO" & type != "NETWORK NODE"
+(48 real changes made)
+
+. replace flag_gen_node = 0 if iso == "NYISO" & type != "Generator"
+(15 real changes made)
+
+. 
+. *PJM HAS A BUNCH OF REPEATED NODES
+. gsort iso node_name node_id -flag_gen_node
+
+. bys iso node_name node_id: gen te = _n
+
+. drop if te > 1
+(356 observations deleted)
+
+. drop te
+
+. 
+. gen flag_in_geodata = cond(lat==.,0,1)
+
+. rename lat node_lat 
+
+. rename long node_long
+
+. 
+. drop if node_id == 112585983  // dupe in pjm 
+(2 observations deleted)
+
+. drop if node_id == 65732121
+(2 observations deleted)
+
+. *drop two duplicates with leading zeros
+. sort my_node_id node_name
+
+. by my_node_id: gen te = _n
+
+. drop if te > 1
+(0 observations deleted)
+
+. 
+. rename state node_state
+
+. keep node_id node_name iso node_lat node_long my_node* flag_* node_state
+
+. 
+. merge 1:1 my_node_id using nodecounts, keep(match) nogen
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                            24,416  
+    -----------------------------------------
+
+. 
+. save lmp_geonode_list, replace
+(note: file lmp_geonode_list.dta not found)
+file lmp_geonode_list.dta saved
+
+. 
+. 
+. /*******************************************************************************
+> MATCH WIND FARMS TO NEAREST NODE IN ISO DATA
+> *******************************************************************************/
+. * BRING IN WIND FARM LOCATIONS 
+. use "$generated_data/final_panel_static.dta", clear
+
+. 
+. rename a1603 flag_1603
+
+. replace flag_1603 = 0 if flag_1603 == .
+(701 real changes made)
+
+. label var flag_1603 "1603 Grant" 
+
+. 
+. rename state plant_state
+
+. 
+. *CLEAN ISO NAMES
+. gen iso_rto_code = cond(iso_snl!= "",iso_snl,isortocode)
+(176 missing values generated)
+
+. 
+. replace iso_rto_code = "NEISO" if iso_rto_code == "New England"
+(41 real changes made)
+
+. replace iso_rto_code = "NYISO" if iso_rto_code == "New York"
+(22 real changes made)
+
+. replace iso_rto_code = "MISO" if iso_rto_code == "MISO, SPP"
+(9 real changes made)
+
+. replace iso_rto_code = "PJM" if iso_rto_code == "MISO, PJM" 
+(12 real changes made)
+
+. replace iso_rto_code = "ERCOT" if iso_rto_code == "ERCOT, SPP" 
+(3 real changes made)
+
+. replace iso_rto_code = "None" if iso_rto_code == ""
+(176 real changes made)
+
+. rename iso_rto_code plant_iso
+
+. 
+. keep facilityid eia_lat eia_long ope_date_min plant_iso flag_1603 plant_state
+
+. save plantdata, replace
+(note: file plantdata.dta not found)
+file plantdata.dta saved
+
+. 
+. *FIRST FIND NEAREST NODE TO EACH PLANT
+. use lmp_geonode_list, clear
+
+. keep if nodeObs == 48
+(8,536 observations deleted)
+
+. keep if flag_in_geodata
+(1,407 observations deleted)
+
+. rename iso my_node_iso
+
+. keep my_node_id my_node_string node_lat node_long my_node_iso node_name node_id
+
+. save nodedata, replace
+(note: file nodedata.dta not found)
+file nodedata.dta saved
+
+. 
+. use plantdata, clear
+
+. geonear facilityid eia_lat eia_long using nodedata, ///
+>         n(my_node_string node_lat node_long) long ///
+>         near(20)
+
+-------------------------------------------------------------------------------
+Unique base locations   = 939            Unique neighbor locations = 14,473    
+Bases * Neighbors  (M)  = 13.6           Number of regions         = 80        
+Computed distances      = 475,702        Total run time (seconds)  = 1.092
+-------------------------------------------------------------------------------
+
+. sort facilityid km
+
+. save mlist, replace
+(note: file mlist.dta not found)
+file mlist.dta saved
+
+. 
+. use mlist, clear
+
+. merge m:1 facilityid using plantdata, nogen keep(match)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                            18,780  
+    -----------------------------------------
+
+. merge m:1 my_node_string using nodedata, nogen keep(match)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                            18,780  
+    -----------------------------------------
+
+. gen iso_match = cond(my_node_iso == plant_iso,1,0)
+
+. save plant_lmp_matches_n20, replace 
+(note: file plant_lmp_matches_n20.dta not found)
+file plant_lmp_matches_n20.dta saved
+
+. 
+. use plant_lmp_matches_n20, clear
+
+. keep if iso_match       
+(6,317 observations deleted)
+
+. gsort facilityid km 
+
+. by facilityid: gen nn = _n
+
+. keep if nn == 1
+(11,825 observations deleted)
+
+. keep facilityid my_node_string km_to_my_node
+
+. merge m:1 my_node_string using nodedata, nogen keep(match)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                               638  
+    -----------------------------------------
+
+. *rename my_node_string node_string_inISO 
+. *rename km_to_my_node km_ISOnode
+. save "$generated_data/facility_closestnode_ISO.dta", replace
+file C:\GitDir\Projects\ags_capital_vs_output/generated_data/facility_closestnode_ISO.dt
+> a saved
+
+. 
+. 
+. use plant_lmp_matches_n20, clear
+
+. gsort facilityid km 
+
+. by facilityid: gen nn = _n
+
+. keep if nn == 1
+(17,841 observations deleted)
+
+. keep facilityid my_node_string km_to_my_node
+
+. merge m:1 my_node_string using nodedata, nogen keep(match)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                               939  
+    -----------------------------------------
+
+. *rename my_node_string node_string_nearest
+. *rename km_to_my_node km_ClosestNode
+. save "$generated_data/facility_closestnode.dta", replace
+file C:\GitDir\Projects\ags_capital_vs_output/generated_data/facility_closestnode.dta sa
+> ved
+
+. 
+. 
+. /*******************************************************************************
+> PART 2: 
+> *******************************************************************************/
+. 
+. use "$generated_data/facility_closestnode.dta", clear
+
+. append using "$generated_data/facility_closestnode_ISO.dta"
+
+. bys my_node_string: gen tn = _n
+
+. keep if tn == 1
+(1,139 observations deleted)
+
+. drop tn
+
+. save uniquenodes, replace
+(note: file uniquenodes.dta not found)
+file uniquenodes.dta saved
+
+. 
+. ** MISO 
+. use uniquenodes, clear
+
+. keep if my_node_is == "MISO"
+(289 observations deleted)
+
+. di _N
+149
+
+. save isonodes, replace
+(note: file isonodes.dta not found)
+file isonodes.dta saved
+
+. 
+. use isonodes, clear
+
+. keep node_name
+
+. merge 1:m node_name using "$dropbox/Data/public/ISO_LMP/MISO/miso_2009.dta", nogen kee
+> p(match master)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                            15
+        from master                        15  
+        from using                          0  
+
+    matched                           974,880  
+    -----------------------------------------
+
+. save apdat, replace 
+(note: file apdat.dta not found)
+file apdat.dta saved
+
+. 
+. forval i = 2010/2015 {
+  2.         use isonodes, clear
+  3.         keep node_name
+  4.         merge 1:m node_name using "$dropbox/Data/public/ISO_LMP/MISO/miso_`i'.dta",
+>  nogen keep(match master)
+  5.         append using apdat
+  6.         save apdat, replace 
+  7. }
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                         1,235,400  
+    -----------------------------------------
+file apdat.dta saved
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                         1,305,240  
+    -----------------------------------------
+file apdat.dta saved
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                         1,305,240  
+    -----------------------------------------
+(note: variable lmp was float, now double to accommodate using data's values)
+(note: variable mcc was float, now double to accommodate using data's values)
+(note: variable mlc was float, now double to accommodate using data's values)
+file apdat.dta saved
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                         1,305,240  
+    -----------------------------------------
+(note: variable lmp was float, now double to accommodate using data's values)
+(note: variable mcc was float, now double to accommodate using data's values)
+(note: variable mlc was float, now double to accommodate using data's values)
+file apdat.dta saved
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                         1,305,240  
+    -----------------------------------------
+(note: variable lmp was float, now double to accommodate using data's values)
+(note: variable mcc was float, now double to accommodate using data's values)
+(note: variable mlc was float, now double to accommodate using data's values)
+file apdat.dta saved
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                         1,305,240  
+    -----------------------------------------
+(note: variable lmp was float, now double to accommodate using data's values)
+(note: variable mcc was float, now double to accommodate using data's values)
+(note: variable mlc was float, now double to accommodate using data's values)
+file apdat.dta saved
+
+. 
+. save miso_plant_nodes, replace
+(note: file miso_plant_nodes.dta not found)
+file miso_plant_nodes.dta saved
+
+. 
+. 
+. ** CAISO 
+. use uniquenodes, clear
+
+. keep if my_node_is == "CAISO"
+(358 observations deleted)
+
+. di _N
+80
+
+. save isonodes, replace
+file isonodes.dta saved
+
+. 
+. use isonodes, clear
+
+. keep node_name
+
+. merge 1:m node_name using "$dropbox/Data/public/ISO_LMP/CAISO/caiso2009.dta", nogen ke
+> ep(match master)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             8
+        from master                         8  
+        from using                          0  
+
+    matched                           439,241  
+    -----------------------------------------
+
+. save apdat, replace 
+file apdat.dta saved
+
+. 
+. forval i = 2010/2015 {
+  2.         use isonodes, clear
+  3.         keep node_name
+  4.         merge 1:m node_name using "$dropbox/Data/public/ISO_LMP/CAISO/caiso`i'.dta"
+> , nogen keep(match master)
+  5.         append using apdat
+  6.         save apdat, replace 
+  7. }
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                           625,976  
+    -----------------------------------------
+file apdat.dta saved
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                           669,760  
+    -----------------------------------------
+file apdat.dta saved
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                           671,920  
+    -----------------------------------------
+file apdat.dta saved
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                           670,800  
+    -----------------------------------------
+file apdat.dta saved
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                           669,840  
+    -----------------------------------------
+file apdat.dta saved
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                           669,680  
+    -----------------------------------------
+file apdat.dta saved
+
+. 
+. save caiso_plant_nodes, replace
+(note: file caiso_plant_nodes.dta not found)
+file caiso_plant_nodes.dta saved
+
+. 
+. 
+. 
+. ** ERCOT 
+. use uniquenodes, clear
+
+. keep if my_node_is == "ERCOT"
+(377 observations deleted)
+
+. di _N
+61
+
+. save isonodes, replace
+file isonodes.dta saved
+
+. 
+. use isonodes, clear
+
+. keep node_name
+
+. merge 1:m node_name using "$dropbox/Data/public/ISO_LMP/ERCOT/ercot_2010.dta", nogen k
+> eep(match master)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                            45,384  
+    -----------------------------------------
+
+. save apdat, replace 
+file apdat.dta saved
+
+. 
+. forval i = 2011/2015 {
+  2.         use isonodes, clear
+  3.         keep node_name
+  4.         merge 1:m node_name using "$dropbox/Data/public/ISO_LMP/ERCOT/ercot_`i'.dta
+> ", nogen keep(match master)
+  5.         append using apdat
+  6.         save apdat, replace 
+  7. }
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                           534,177  
+    -----------------------------------------
+(note: variable lmp was float, now double to accommodate using data's values)
+file apdat.dta saved
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                           535,763  
+    -----------------------------------------
+(note: variable lmp was float, now double to accommodate using data's values)
+file apdat.dta saved
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                           534,299  
+    -----------------------------------------
+(note: variable lmp was float, now double to accommodate using data's values)
+file apdat.dta saved
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                           533,628  
+    -----------------------------------------
+(note: variable lmp was float, now double to accommodate using data's values)
+file apdat.dta saved
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                           191,723  
+    -----------------------------------------
+(note: variable lmp was float, now double to accommodate using data's values)
+file apdat.dta saved
+
+. 
+. save ercot_plant_nodes, replace
+(note: file ercot_plant_nodes.dta not found)
+file ercot_plant_nodes.dta saved
+
+. 
+. 
+. ** PJM
+. use uniquenodes, clear
+
+. keep if my_node_is == "PJM"
+(345 observations deleted)
+
+. di _N
+93
+
+. keep node_name node_id
+
+. save isonodes, replace
+file isonodes.dta saved
+
+. 
+. use "$dropbox/Data/public/ISO_LMP/PJM/pjm_2009.dta", clear
+
+. sort node_name node_id date hour lmp
+
+. bys node_name node_id date hour: gen tn = _n
+
+. keep if tn == 1
+(8,736 observations deleted)
+
+. drop tn 
+
+. merge m:1 node_name node_id using isonodes, nogen keep(match)
+(note: variable node_name was str19, now str35 to accommodate using data's values)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                           701,256  
+    -----------------------------------------
+
+. save apdat, replace 
+file apdat.dta saved
+
+. 
+. 
+. forval i = 2010/2015 {
+  2.         use "$dropbox/Data/public/ISO_LMP/PJM/pjm_`i'.dta", clear
+  3.         sort node_name node_id date hour lmp
+  4.         bys node_name node_id date hour: gen tn = _n
+  5.         keep if tn == 1
+  6.         drop tn 
+  7.         merge m:1 node_name node_id using isonodes, nogen keep(match)
+  8.         append using apdat
+  9.         save apdat, replace 
+ 10. }
+(8,736 observations deleted)
+(note: variable node_name was str19, now str35 to accommodate using data's values)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                           778,344  
+    -----------------------------------------
+file apdat.dta saved
+(8,736 observations deleted)
+(note: variable node_name was str19, now str35 to accommodate using data's values)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                           814,680  
+    -----------------------------------------
+file apdat.dta saved
+(8,760 observations deleted)
+(note: variable node_name was str19, now str35 to accommodate using data's values)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                           816,912  
+    -----------------------------------------
+file apdat.dta saved
+(8,736 observations deleted)
+(note: variable node_name was str19, now str35 to accommodate using data's values)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                           814,680  
+    -----------------------------------------
+file apdat.dta saved
+(8,736 observations deleted)
+(note: variable node_name was str19, now str35 to accommodate using data's values)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                           814,680  
+    -----------------------------------------
+file apdat.dta saved
+(8,736 observations deleted)
+(note: variable node_name was str22, now str35 to accommodate using data's values)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                           814,680  
+    -----------------------------------------
+file apdat.dta saved
+
+. 
+. save pjm_plant_nodes, replace
+(note: file pjm_plant_nodes.dta not found)
+file pjm_plant_nodes.dta saved
+
+. 
+. 
+. ** NEISO 
+. use uniquenodes, clear
+
+. keep if my_node_is == "NEISO"
+(401 observations deleted)
+
+. di _N
+37
+
+. replace node_name = strtrim(node_name)
+(0 real changes made)
+
+. keep node_name
+
+. save isonodes, replace
+file isonodes.dta saved
+
+. 
+. use "$dropbox/Data/public/ISO_LMP/NEISO/neiso_lmp_2009.dta", clear
+
+. replace node_name = strtrim(node_name)
+(86,956 real changes made)
+
+. merge m:1 node_name using isonodes, nogen keep(match using)
+(note: variable node_name was str23, now str35 to accommodate using data's values)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                            10
+        from master                         0  
+        from using                         10  
+
+    matched                           226,634  
+    -----------------------------------------
+
+. save apdat, replace 
+file apdat.dta saved
+
+. 
+. forval i = 2010/2015 {
+  2.         use "$dropbox/Data/public/ISO_LMP/NEISO/neiso_lmp_`i'.dta", clear
+  3.         replace node_name = strtrim(node_name)
+  4.         merge m:1 node_name using isonodes, nogen keep(match using)
+  5.         append using apdat
+  6.         save apdat, replace 
+  7. }
+(146,546 real changes made)
+(note: variable node_name was str23, now str35 to accommodate using data's values)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             5
+        from master                         0  
+        from using                          5  
+
+    matched                           273,025  
+    -----------------------------------------
+file apdat.dta saved
+(373,130 real changes made)
+(note: variable node_name was str26, now str35 to accommodate using data's values)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                           324,120  
+    -----------------------------------------
+file apdat.dta saved
+(437,040 real changes made)
+(note: variable node_name was str26, now str35 to accommodate using data's values)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                           325,008  
+    -----------------------------------------
+file apdat.dta saved
+(438,000 real changes made)
+(note: variable node_name was str26, now str35 to accommodate using data's values)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                           324,120  
+    -----------------------------------------
+file apdat.dta saved
+(430,248 real changes made)
+(note: variable node_name was str26, now str35 to accommodate using data's values)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                           324,120  
+    -----------------------------------------
+file apdat.dta saved
+(121,106 real changes made)
+(note: variable node_name was str26, now str35 to accommodate using data's values)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             4
+        from master                         0  
+        from using                          4  
+
+    matched                            87,087  
+    -----------------------------------------
+file apdat.dta saved
+
+. 
+. save neiso_plant_nodes, replace
+(note: file neiso_plant_nodes.dta not found)
+file neiso_plant_nodes.dta saved
+
+. 
+. 
+. ** NYISO
+. use uniquenodes, clear
+
+. keep if my_node_is == "NYISO"
+(420 observations deleted)
+
+. di _N
+18
+
+. save isonodes, replace
+file isonodes.dta saved
+
+. 
+. use isonodes, clear
+
+. keep node_name
+
+. merge 1:m node_name using "$dropbox/Data/public/ISO_LMP/NYISO/nyiso_2009.dta", nogen k
+> eep(match master)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             3
+        from master                         3  
+        from using                          0  
+
+    matched                           131,265  
+    -----------------------------------------
+
+. save apdat, replace 
+file apdat.dta saved
+
+. 
+. forval i = 2010/2015 {
+  2.         use isonodes, clear
+  3.         keep node_name
+  4.         merge 1:m node_name using "$dropbox/Data/public/ISO_LMP/NYISO/nyiso_`i'.dta
+> ", nogen keep(match master)
+  5.         append using apdat
+  6.         save apdat, replace 
+  7. }
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                           133,005  
+    -----------------------------------------
+file apdat.dta saved
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                           156,852  
+    -----------------------------------------
+file apdat.dta saved
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                           158,094  
+    -----------------------------------------
+file apdat.dta saved
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                           157,662  
+    -----------------------------------------
+file apdat.dta saved
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                           157,662  
+    -----------------------------------------
+file apdat.dta saved
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                           157,662  
+    -----------------------------------------
+file apdat.dta saved
+
+. 
+. save nyiso_plant_nodes, replace
+(note: file nyiso_plant_nodes.dta not found)
+file nyiso_plant_nodes.dta saved
+
+. 
+. 
+. ** append all together 
+. use pjm_plant_nodes, clear
+
+. gen ISO = "PJM"
+
+. di _N
+5555232
+
+. save apdat, replace
+file apdat.dta saved
+
+. 
+. local isolist caiso ercot miso neiso nyiso 
+
+. foreach tn in `isolist' {
+  2.         di "`tn'"
+  3.         use `tn'_plant_nodes, clear
+  4.         gen ISO = strupper("`tn'")
+  5.         di _N
+  6.         append using apdat
+  7.         save apdat, replace
+  8. 
+. }
+caiso
+4417225
+(note: variable lmp was float, now double to accommodate using data's values)
+file apdat.dta saved
+ercot
+2374974
+file apdat.dta saved
+miso
+8736495
+(note: variable ISO was str4, now str5 to accommodate using data's values)
+file apdat.dta saved
+neiso
+1884133
+file apdat.dta saved
+nyiso
+1052205
+(note: variable type was str9, now str12 to accommodate using data's values)
+(note: variable lmp was float, now double to accommodate using data's values)
+file apdat.dta saved
+
+. 
+. gen Year = year(date)
+(45 missing values generated)
+
+. gen Month = month(date)
+(45 missing values generated)
+
+. 
+. save "$dropbox/Data/public/ISO_LMP/closenodes_hourly_data.dta", replace
+file C:/Dropbox/projects/Completed_Projects/1603/Data/public/ISO_LMP/closenodes_hourly_d
+> ata.dta saved
+
+. 
+. ********************************************************************************
+. tempsetup
+C:\GitDir\Projects\ags_capital_vs_output\temp
+
+. cd "$repodir" 
+C:\GitDir\Projects\ags_capital_vs_output
+
+. capture log close

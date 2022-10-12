@@ -1,0 +1,462 @@
+----------------------------------------------------------------------------------------
+      name:  <unnamed>
+       log:  C:\GitDir\Projects\ags_capital_vs_output/output/logs/get_negative_price_pro
+> duction.txt
+  log type:  text
+ opened on:  14 Jul 2022, 09:57:55
+
+. ********************************************************************************
+. 
+. use $generated_data/static_reg_data, clear
+
+. keep if firstyear > 2004 & firstyear < 2013
+(335 observations deleted)
+
+. keep facilityid 
+
+. merge 1:1 facilityid using "$generated_data/facility_closestnode.dta", nogen keep(matc
+> h)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                               623  
+    -----------------------------------------
+
+. rename my_node_iso ISO 
+
+. save facilitydata, replace
+(note: file facilitydata.dta not found)
+file facilitydata.dta saved
+
+. 
+. keep facilityid ISO node_name node_id
+
+. save faclist, replace
+(note: file faclist.dta not found)
+file faclist.dta saved
+
+. 
+. * LOAD AND SAVE A SUBSET OF THE WINDSPEED DATA FOR JUST THE YEARS WE HAVE PRICES FOR
+. use "$wind_data_dir\wind_all_plants.dta" if date > date("20100101","YMD"), clear
+
+. gen double eventtime = clock(fields, "YMDhms")
+
+. format eventtime %tc
+
+. gen hour = hh(eventtime)
+
+. capture drop date
+
+. gen date=dofc(eventtime)
+
+. format %td date
+
+. gen Year = year(date)
+
+. gen Month = month(date)
+
+. gen Day = day(date)
+
+. 
+. drop fields 
+
+. save windtempdat, replace
+(note: file windtempdat.dta not found)
+file windtempdat.dta saved
+
+. 
+. 
+. use "$generated_data/models_powercurve_xwalk.dta", clear
+
+. * this should be zero in the TWP power curve data 
+. replace w5 = 0 if powercurve_turbinemodel == "swt-2.3-101"
+(42 real changes made)
+
+. save xwalk, replace
+(note: file xwalk.dta not found)
+file xwalk.dta saved
+
+. 
+. ** THIS SECTION COPIED FROM calc_output.do 
+. * CREATE A DATASET WITH JUST REFERENCE POWERCURVE
+. use xwalk, clear
+
+. keep if powercurve_turbinemodel == "1.5sle"
+(730 observations deleted)
+
+. keep powercurve_turbinemodel w*
+
+. duplicates drop
+
+Duplicates in terms of all variables
+
+(228 observations deleted)
+
+. *note this renvars command no longer used. see here https://www.statalist.org/forums/f
+> orum/general-stata-discussion/general/1560780-renvars-command
+. *renvars w*, prefix("ref")
+. rename (w*) ref=
+
+. save reference_powercurve, replace
+(note: file reference_powercurve.dta not found)
+file reference_powercurve.dta saved
+
+. 
+. 
+. use windtempdat, clear
+
+. merge m:1 facilityid using faclist, nogen keep(match)
+(note: variable facilityid was float, now double to accommodate using data's values)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                        27,226,586  
+    -----------------------------------------
+
+.                 
+.         * Bring in powercurve for each facility
+.         merge m:1 facilityid using  xwalk, keep(master matched) nogen
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                        27,226,586  
+    -----------------------------------------
+
+.         
+.         **************************************
+.         * CALC OUTPUT USING MATCHED POWERCURVE
+.         **************************************
+.         gen output = 0
+
+.         * Multiplying by 2 because w30 corresponds to 15 miles per hour. 
+.         * So if wind is 15.32 becomes 30 so then output for w30 gets selected
+.         gen wind = round(windspeed_80m * 2)
+
+.         
+.         forval i = 0 / 60 {
+  2.                 replace output = w`i' if wind == `i'
+  3.         }
+(0 real changes made)
+(0 real changes made)
+(0 real changes made)
+(0 real changes made)
+(0 real changes made)
+(30,786 real changes made)
+(474,807 real changes made)
+(1,014,862 real changes made)
+(1,284,466 real changes made)
+(1,420,772 real changes made)
+(1,528,007 real changes made)
+(1,610,884 real changes made)
+(1,655,521 real changes made)
+(1,655,071 real changes made)
+(1,615,097 real changes made)
+(1,548,858 real changes made)
+(1,448,199 real changes made)
+(1,343,131 real changes made)
+(1,223,376 real changes made)
+(1,089,941 real changes made)
+(959,720 real changes made)
+(833,959 real changes made)
+(714,895 real changes made)
+(605,649 real changes made)
+(509,791 real changes made)
+(422,193 real changes made)
+(345,479 real changes made)
+(279,783 real changes made)
+(223,665 real changes made)
+(173,537 real changes made)
+(132,460 real changes made)
+(99,752 real changes made)
+(73,006 real changes made)
+(54,113 real changes made)
+(38,900 real changes made)
+(27,049 real changes made)
+(18,476 real changes made)
+(13,129 real changes made)
+(8,965 real changes made)
+(6,163 real changes made)
+(3,887 real changes made)
+(2,034 real changes made)
+(1,379 real changes made)
+(917 real changes made)
+(604 real changes made)
+(404 real changes made)
+(259 real changes made)
+(177 real changes made)
+(92 real changes made)
+(50 real changes made)
+(49 real changes made)
+(0 real changes made)
+(0 real changes made)
+(0 real changes made)
+(0 real changes made)
+(0 real changes made)
+(0 real changes made)
+(0 real changes made)
+(0 real changes made)
+(0 real changes made)
+(0 real changes made)
+
+.         gen output_adjusted  = (pressure_0m / temperature_2m) / (101325 / 288.15) * ou
+> tput
+
+.         
+.         *****************************************************
+.         * CALC REFERENCE OUTPUT (OUTPUT USING MODAL TURBINE)
+.         *****************************************************
+.         
+.         * Regular output for unmatched turbines was using modal turbine. Dont' need to
+>  calc again
+.         if flag_powercurve == 0 | powercurve_turbinemodel == "1.5sle" {
+.                 gen output_refturb = output
+.                 gen output_refturb_adjusted = output_adjusted
+.         }
+
+. 
+.         * FOR MATCHED FACILITIES, GOING TO BRING IN MODAL POWERCURVE AND CALCULATE OUT
+> PUT
+.         else {
+.                 cross using reference_powercurve
+.                 gen output_refturb = 0
+.                 forval i = 0 / 60 {
+  2.                         replace output_refturb = refw`i' if wind == `i'
+  3.                 }
+(0 real changes made)
+(0 real changes made)
+(0 real changes made)
+(0 real changes made)
+(0 real changes made)
+(0 real changes made)
+(972,142 real changes made)
+(1,136,106 real changes made)
+(1,292,095 real changes made)
+(1,420,772 real changes made)
+(1,528,007 real changes made)
+(1,610,884 real changes made)
+(1,655,521 real changes made)
+(1,655,071 real changes made)
+(1,615,097 real changes made)
+(1,548,858 real changes made)
+(1,448,199 real changes made)
+(1,343,131 real changes made)
+(1,223,376 real changes made)
+(1,089,941 real changes made)
+(959,720 real changes made)
+(833,959 real changes made)
+(714,895 real changes made)
+(605,649 real changes made)
+(509,791 real changes made)
+(422,193 real changes made)
+(345,479 real changes made)
+(279,783 real changes made)
+(223,665 real changes made)
+(173,537 real changes made)
+(132,460 real changes made)
+(99,752 real changes made)
+(73,006 real changes made)
+(54,258 real changes made)
+(39,005 real changes made)
+(27,109 real changes made)
+(18,522 real changes made)
+(13,157 real changes made)
+(8,981 real changes made)
+(6,173 real changes made)
+(3,895 real changes made)
+(2,458 real changes made)
+(1,686 real changes made)
+(1,104 real changes made)
+(731 real changes made)
+(488 real changes made)
+(314 real changes made)
+(206 real changes made)
+(117 real changes made)
+(72 real changes made)
+(59 real changes made)
+(0 real changes made)
+(0 real changes made)
+(0 real changes made)
+(0 real changes made)
+(0 real changes made)
+(0 real changes made)
+(0 real changes made)
+(0 real changes made)
+(0 real changes made)
+(0 real changes made)
+.                 gen output_refturb_adjusted = (pressure_0m / temperature_2m) / (101325
+>  / 288.15) * output_refturb
+.         }
+
+. 
+.         foreach var in output output_adjusted output_refturb output_refturb_adjusted {
+  2.                 replace `var' = `var' / 1000
+  3.         }
+(24,494,314 real changes made)
+(24,494,314 real changes made)
+(25,091,424 real changes made)
+(25,091,424 real changes made)
+
+.         
+.         gen reference_turbine_capacity = 1.5
+
+.         label var output "Monthly output (MWH)"
+
+.         label var output_adjusted "Monthly output (MWH) adjusted for temp and pressure
+> "
+
+.         label var output_refturb "Monthly output using the modal turbine"
+
+.         label var output_refturb_adjusted "Monthly output using modal turbine adj for 
+> temp and pressure"
+
+. 
+. keep facilityid hour Year Month Day ISO node_name node_id output wind /// 
+>                         output_adjusted output_refturb output_refturb_adjusted
+
+. save outputhours, replace
+(note: file outputhours.dta not found)
+file outputhours.dta saved
+
+. 
+. 
+. use "$dropbox/Data/public/ISO_LMP/closenodes_hourly_data.dta", clear
+
+. keep if Year > 2009
+(2,473,276 observations deleted)
+
+. gen Day = day(date)
+(45 missing values generated)
+
+. joinby ISO node_name node_id using faclist
+
+. sort facilityid Year Month Day hour
+
+. drop mcc mlc 
+
+. replace hour = hour - 1
+(27,984,623 real changes made)
+
+. save longnodedat, replace
+(note: file longnodedat.dta not found)
+file longnodedat.dta saved
+
+. 
+. 
+. use longnodedat, clear
+
+. drop if Year == . | Month == .
+(55 observations deleted)
+
+. merge 1:1 facilityid Year Month Day hour using outputhours, keep(match using)
+(note: variable facilityid was long, now double to accommodate using data's values)
+(note: variable hour was byte, now float to accommodate using data's values)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                     3,515,665
+        from master                         0  (_merge==1)
+        from using                  3,515,665  (_merge==2)
+
+    matched                        23,710,921  (_merge==3)
+    -----------------------------------------
+
+. gen flag_misslmp = cond(_merge <3,1,0)
+
+. replace lmp = 1 if lmp == .
+(3,515,947 real changes made)
+
+. capture drop lmp_l* l_out*
+
+. 
+. local outlist 0 5 15 23 25
+
+. foreach t in `outlist' {
+  2.         
+.         gen lmp_l`t' = cond(lmp < (-`t'),1,0)
+  3.         gen l_output_`t' = output*lmp_l`t'
+  4.         gen l_output_adj_`t' = output_adjusted*lmp_l`t'
+  5.         gen l_output_ref_`t' = output_refturb*lmp_l`t'
+  6.         gen l_output_ref_adj_`t' = output_refturb_adjusted*lmp_l`t'
+  7. 
+. }
+
+. 
+. gen monthours = 1
+
+. collapse (sum) output* l_* lmp_l* flag_misslmp monthours, by(facilityid Year Month)
+
+. 
+. save facility_negative_prod, replace
+(note: file facility_negative_prod.dta not found)
+file facility_negative_prod.dta saved
+
+. 
+. 
+. use facilitydata, clear
+
+. merge 1:m facilityid using facility_negative_prod, nogen keep(match)
+(note: variable facilityid was long, now double to accommodate using data's values)
+
+    Result                           # of obs.
+    -----------------------------------------
+    not matched                             0
+    matched                            37,934  
+    -----------------------------------------
+
+. 
+. gen share_l0 = lmp_l0/monthours
+
+. gen share_l23 = lmp_l23/monthours
+
+. 
+. gen output_share_l0 = l_output_0/output
+(55 missing values generated)
+
+. gen output_share_l23 = l_output_23/output
+(55 missing values generated)
+
+. gen output_share_l0_adj = l_output_adj_0/output_adj
+(55 missing values generated)
+
+. gen output_share_l23_adj = l_output_adj_23/output_adj
+(55 missing values generated)
+
+. 
+. gen misshare = flag_misslmp/monthours
+
+. 
+. rename Year year 
+
+. rename Month month
+
+. rename output_adj output_adj_new
+
+. rename output output_new
+
+. rename ISO node_ISO_new
+
+. 
+. keep facilityid year month share_* /// 
+>                 l_output_0 l_output_23 output_new ///
+>                 l_output_adj_0 l_output_adj_23 output_adj_new ///
+>                 misshare monthours km_to_my_node output_share_* node_ISO_new
+
+. 
+. save "$generated_data/negative_correction.dta", replace
+file C:\GitDir\Projects\ags_capital_vs_output/generated_data/negative_correction.dta sav
+> ed
+
+. 
+. 
+. ********************************************************************************
+. 
+. tempsetup
+C:\GitDir\Projects\ags_capital_vs_output\temp
+
+. cd "$repodir" 
+C:\GitDir\Projects\ags_capital_vs_output
+
+. capture log close

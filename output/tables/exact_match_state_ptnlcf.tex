@@ -1,0 +1,16 @@
+{
+\def\sym#1{\ifmmode^{#1}\else\(^{#1}\)\fi}
+\begin{tabular}{l*{5}{c}}
+\toprule
+                    &\multicolumn{1}{c}{(1)}         &\multicolumn{1}{c}{(2)}         &\multicolumn{1}{c}{(3)}         &\multicolumn{1}{c}{(4)}         &\multicolumn{1}{c}{(5)}         \\
+\midrule
+1603 Grant          &      -2.942\sym{***}&      -3.884\sym{***}&      -3.120\sym{***}&      -2.712\sym{**} &      -2.780\sym{**} \\
+                    &     (0.719)         &     (1.027)         &     (1.067)         &     (1.098)         &     (1.196)         \\
+\midrule
+Sample              &         All         &     Matched         &     Matched         &     Matched         &     Matched         \\
+FEs                 &       State         &       State         &       Group         &     Group*Y         &   Group*Y*M         \\
+R-sq.               &       0.615         &       0.633         &       0.655         &       0.669         &       0.789         \\
+N                   &       21303         &       12885         &       12885         &       12885         &       12885         \\
+\bottomrule
+\end{tabular}
+}
